@@ -11,7 +11,7 @@ tre moduli esistenti, decisioni architetturali).
 ## Stato — Fase 1 in corso
 
 - [x] Step 2 — schema, constraint, indici (`supabase/migrations/0001`–`0005`)
-- [ ] Step 3 — RLS, helper function, test di isolamento tenant
+- [x] Step 3 — RLS, helper function, test di isolamento tenant (`0006`–`0007`, `supabase/tests/`)
 - [ ] Step 4 — seed, tipi TypeScript, Core SDK minimo
 - [ ] Step 5 — documentazione, suite di test finale
 
@@ -31,5 +31,15 @@ supabase db reset      # applica le migration in supabase/migrations/ in ordine
 ```
 supabase/
   migrations/    schema Postgres, in ordine di dipendenza (vedi commenti in ogni file)
+  tests/         test pgTAP (isolamento tenant, permessi, entitlement, guest session)
   config.toml    configurazione del progetto Supabase locale
 ```
+
+## Test
+
+Richiede l'estensione [pgTAP](https://pgtap.org/).
+
+```bash
+supabase test db
+```
+
