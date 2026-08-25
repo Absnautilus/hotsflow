@@ -15,10 +15,11 @@ insert into properties (id, organization_id, name, slug) values
 insert into roles (id, slug, display_name, scope) values
   ('00000009-0000-0000-0000-000000000021', 'test_009_org_admin', 'Organization Admin', 'organization');
 
-insert into permissions (id, slug, module_id) values
-  ('00000009-0000-0000-0000-000000000031', 'core.property.manage', null);
-insert into role_permissions (role_id, permission_id) values
-  ('00000009-0000-0000-0000-000000000021', '00000009-0000-0000-0000-000000000031');
+-- Grants the real 'core.property.manage' permission seed.sql ships (looked
+-- up by slug, not duplicated — see 003's own comment on why: the
+-- properties_update RLS policy hardcodes this exact slug).
+insert into role_permissions (role_id, permission_id)
+select '00000009-0000-0000-0000-000000000021', id from permissions where slug = 'core.property.manage';
 
 insert into auth.users (id) values ('00000009-0000-0000-0000-000000000041');
 insert into profiles (id, full_name) values ('00000009-0000-0000-0000-000000000041', 'Org Admin User');

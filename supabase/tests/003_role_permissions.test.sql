@@ -14,12 +14,13 @@ insert into roles (id, slug, display_name, scope) values
   ('00000003-0000-0000-0000-000000000021', 'test_003_receptionist', 'Receptionist', 'property'),
   ('00000003-0000-0000-0000-000000000022', 'test_003_property_admin', 'Property Admin', 'property');
 
-insert into permissions (id, slug, module_id) values
-  ('00000003-0000-0000-0000-000000000031', 'core.property.manage', null);
-
--- only property_admin gets the grant; receptionist gets nothing
-insert into role_permissions (role_id, permission_id) values
-  ('00000003-0000-0000-0000-000000000022', '00000003-0000-0000-0000-000000000031');
+-- The properties_update RLS policy (migration 0007) hardcodes the real
+-- 'core.property.manage' slug, so this test grants that exact permission
+-- rather than inventing a test-scoped one — looked up by slug, not by
+-- seed.sql's id, so this doesn't care exactly how seed.sql built it.
+-- Only property_admin gets the grant; receptionist gets nothing.
+insert into role_permissions (role_id, permission_id)
+select '00000003-0000-0000-0000-000000000022', id from permissions where slug = 'core.property.manage';
 
 insert into auth.users (id) values
   ('00000003-0000-0000-0000-000000000041'),
