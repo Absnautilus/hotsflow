@@ -12,7 +12,7 @@ tre moduli esistenti, decisioni architetturali).
 
 - [x] Step 2 — schema, constraint, indici (`supabase/migrations/0001`–`0005`)
 - [x] Step 3 — RLS, helper function, test di isolamento tenant (`0006`–`0007`, `supabase/tests/`)
-- [ ] Step 4 — seed, tipi TypeScript, Core SDK minimo
+- [x] Step 4 — seed (`supabase/seed.sql`), tipi TypeScript, Core SDK minimo (`src/`)
 - [ ] Step 5 — documentazione, suite di test finale
 
 Nessuno dei tre moduli esistenti viene toccato in questa fase.
@@ -32,14 +32,30 @@ supabase db reset      # applica le migration in supabase/migrations/ in ordine
 supabase/
   migrations/    schema Postgres, in ordine di dipendenza (vedi commenti in ogni file)
   tests/         test pgTAP (isolamento tenant, permessi, entitlement, guest session)
+  seed.sql       dati di sviluppo (2 organization, 3 property, moduli, ruoli — nessuna
+                 credenziale reale, vedi il file per il bootstrap degli utenti di test)
   config.toml    configurazione del progetto Supabase locale
+src/
+  types/database.ts  tipi generati dallo schema (vedi header del file)
+  types/domain.ts     tipi applicativi esposti dall'SDK — mai i tipi grezzi del DB
+  client.ts            createCoreClient() — punto di ingresso dell'SDK
+  profile.ts, memberships.ts, permissions.ts, modules.ts, guestSession.ts
+  moduleContract.ts     il tipo ModuleDescriptor che un modulo usa per dichiararsi
 ```
 
 ## Test
 
-Richiede l'estensione [pgTAP](https://pgtap.org/).
+Database (richiede l'estensione [pgTAP](https://pgtap.org/)):
 
 ```bash
 supabase test db
+```
+
+Core SDK:
+
+```bash
+npm install
+npm run typecheck
+npm test
 ```
 
