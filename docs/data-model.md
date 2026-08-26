@@ -1,9 +1,16 @@
 # Data model
 
-Ten tables, `supabase/migrations/0001`-`0005`. Each migration file's own
+Eleven tables. The first ten came from `supabase/migrations/0001`-`0005`;
+`audit_logs` was added in Fase 1.1 (`0014`). Each migration file's own
 header comments explain the *why* behind non-obvious choices in more depth
 than this document repeats — treat this as the map, the migrations as the
 territory.
+
+`roles`, `permissions`, `role_permissions`, and `modules` are seeded with
+their **system baseline** by migration `0009`, not `supabase/seed.sql` — see
+`permissions.md` for why that distinction matters (RLS policies hardcode
+some of these slugs, so they have to exist on every environment, not just
+local dev). `seed.sql` only adds demo/dev data on top.
 
 ## organizations
 
@@ -45,17 +52,24 @@ kept separate from authorization.
 `display_name`, `status` (`active` \| `beta` \| `deprecated`).
 
 `property_modules`: `id`, `property_id` fk, `module_id` fk, `enabled`
-(boolean), `plan` (reserved, unused in Phase 1), `settings` jsonb, unique
-`(property_id, module_id)`.
+(boolean), `plan` (reserved, unused), `settings` jsonb, unique
+`(property_id, module_id)`. As of Fase 1.1, no write policy exists for
+`authenticated` at all — commercial entitlement is service-role only, see
+`permissions.md`.
 
 ## roles / permissions / role_permissions
 
-Small, fixed, seeded — not runtime-configurable in Phase 1, no write RLS
-policy exists for any of the three (see `rls.md`).
+Small, fixed — not runtime-configurable, no write RLS policy exists for any
+of the three (see `rls.md`).
 
 `roles`: `id`, `slug` (unique), `display_name`, `scope` (`organization` \|
 `property`), `is_system` (always true today; reserved for a future
-org-defined custom role).
+org-defined custom role), `rank` (smallint, added in `0008` — gaps left
+intentionally between the seeded 10/20/30/40, same convention as
+`guest_sessions.verification_level`; see `permissions.md` for what it
+governs). A trigger (`0008`) rejects a membership whose `role_id` points to
+a role of the wrong scope for that membership's own `property_id`/
+`organization_id`.
 
 `permissions`: `id`, `slug` (unique), `module_id` (nullable fk -> modules;
 null = a core permission, e.g. `core.property.manage`).
@@ -111,6 +125,13 @@ column is null on roughly half the rows by design. Plus plain indexes on
 access to this property") that the partial-unique indexes (which lead with
 `profile_id`) don't serve.
 
+**Writes, as of Fase 1.1:** `authenticated` can `UPDATE` only the `status`
+column (a real Postgres column-level grant, not just a policy — see
+`rls.md`) and never their own row. `role_id` changes exclusively through
+`assign_membership_role()`, gated by `roles.rank` and `core.roles.assign` —
+see `permissions.md`'s hierarchy section. `INSERT` (inviting someone) is
+gated by that same rank check, since it sets an initial `role_id` too.
+
 ## guest_sessions
 
 A temporary, revocable, property-scoped guest access — deliberately
@@ -135,12 +156,35 @@ full design rationale; this is the column reference.
 expired; a test that needs an expired fixture backdates `created_at`
 explicitly (see `supabase/tests/006_guest_session_expiry.test.sql`).
 
-## Not built in Phase 1
+## audit_logs
+
+Added in Fase 1.1 (`0014`) once a concrete need existed: the phase
+introduced the first genuinely sensitive membership mutations (role
+changes, suspension). Deliberately minimal — four specific write paths, no
+generic "log any action" mechanism.
+
+| column | type | notes |
+|---|---|---|
+| id | uuid pk | |
+| actor_profile_id | uuid fk -> profiles, nullable | `auth.uid()` at the time of the action |
+| property_id, organization_id | uuid fk, nullable | whichever scope the target membership had |
+| action | text | `membership.created` \| `.suspended` \| `.reactivated` \| `.role_changed` |
+| target_type, target_id | text, uuid | `'membership'`, the membership's id — generic enough to extend, not generalized further than that |
+| old_value, new_value | jsonb, nullable | small, scoped to what changed (e.g. `{"role_id": "..."}`) |
+| created_at | timestamptz | |
+
+Written only by `SECURITY DEFINER` triggers/functions (`log_membership_created`,
+`log_membership_status_change`, and `assign_membership_role()` itself) — no
+insert policy exists for `authenticated`. Read access mirrors
+`core.staff.manage` on the relevant scope; see `rls.md`.
+
+## Not built
 
 **`property_settings`** — use `properties.settings jsonb`. A dedicated table
 is only worth it once settings become genuinely relational and heavily
 queried on their own.
 
-**`invitations`, `audit_logs`** — both reasonable additions, neither needed
-to satisfy Phase 1's own success criteria. Add when a real module migration
-needs one, not before.
+**`invitations`** — still no concrete need; `memberships` with
+`status = 'invited'` plus the hierarchy-gated `INSERT` policy covers what's
+actually required so far. Add when a real module migration needs more
+(e.g. an email-based invite flow with its own token).

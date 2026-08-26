@@ -2,17 +2,25 @@
 -- `migration up` against a real project — this file is not a migration).
 -- No real credentials, no personal emails: everything below is fictitious.
 --
+-- As of Fase 1.1, `modules`, the four system roles, the core permissions,
+-- and their role_permissions grants are bootstrapped by migration 0009 —
+-- not here (see that migration's header for why: a real, hosted project
+-- never applies seed.sql, so anything the RLS policies actually depend on
+-- to function has to live in a migration). This file only adds demo/dev
+-- data on top: organizations, properties, entitlement combinations, a
+-- couple of illustrative module-specific permissions, and — once you
+-- complete the manual step below — five test staff accounts.
+--
+-- Everything below that references modules/roles looks them up by slug,
+-- never by a hardcoded id — 0009 doesn't pin fixed ids either, precisely so
+-- nothing downstream has to guess them.
+--
 -- Builds:
 --   Organization A
 --       +-- Property A1  (guest_requests ON, transfers OFF, shifts ON)
 --       +-- Property A2  (guest_requests OFF, transfers ON, shifts ON)
 --   Organization B
 --       +-- Property B1  (guest_requests ON, transfers ON, shifts OFF)
---
--- ...plus the 4 roles from the Architecture Proposal's own examples
--- (organization_admin, property_admin, manager, receptionist), the module
--- registry, and enough role_permissions to make module entitlement and
--- role-based access actually testable end to end.
 
 -- ---------------------------------------------------------------------------
 -- organizations / properties
@@ -27,69 +35,64 @@ insert into properties (id, organization_id, name, slug) values
   ('a1000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000002', 'Property B1', 'b1');
 
 -- ---------------------------------------------------------------------------
--- modules / property_modules — three different entitlement combinations on
--- purpose, so "does this property have this module?" is actually exercised
--- three different ways, not just ON/ON/ON everywhere.
+-- property_modules — three different entitlement combinations on purpose,
+-- so "does this property have this module?" is actually exercised three
+-- different ways, not just ON/ON/ON everywhere. Modules themselves come
+-- from migration 0009; looked up here by slug.
 -- ---------------------------------------------------------------------------
-insert into modules (id, slug, display_name) values
-  ('a2000000-0000-0000-0000-000000000001', 'guest_requests', 'Guest Requests'),
-  ('a2000000-0000-0000-0000-000000000002', 'transfers', 'Transfers'),
-  ('a2000000-0000-0000-0000-000000000003', 'shifts', 'Shifts');
-
-insert into property_modules (property_id, module_id, enabled) values
-  ('a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', true),   -- A1: guest_requests ON
-  ('a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000002', false),  -- A1: transfers OFF
-  ('a1000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000003', true),   -- A1: shifts ON
-  ('a1000000-0000-0000-0000-000000000002', 'a2000000-0000-0000-0000-000000000001', false),  -- A2: guest_requests OFF
-  ('a1000000-0000-0000-0000-000000000002', 'a2000000-0000-0000-0000-000000000002', true),   -- A2: transfers ON
-  ('a1000000-0000-0000-0000-000000000002', 'a2000000-0000-0000-0000-000000000003', true),   -- A2: shifts ON
-  ('a1000000-0000-0000-0000-000000000003', 'a2000000-0000-0000-0000-000000000001', true),   -- B1: guest_requests ON
-  ('a1000000-0000-0000-0000-000000000003', 'a2000000-0000-0000-0000-000000000002', true),   -- B1: transfers ON
-  ('a1000000-0000-0000-0000-000000000003', 'a2000000-0000-0000-0000-000000000003', false);  -- B1: shifts OFF
+insert into property_modules (property_id, module_id, enabled)
+select v.property_id, m.id, v.enabled
+from (values
+  ('a1000000-0000-0000-0000-000000000001'::uuid, 'guest_requests', true),   -- A1: guest_requests ON
+  ('a1000000-0000-0000-0000-000000000001'::uuid, 'transfers', false),        -- A1: transfers OFF
+  ('a1000000-0000-0000-0000-000000000001'::uuid, 'shifts', true),            -- A1: shifts ON
+  ('a1000000-0000-0000-0000-000000000002'::uuid, 'guest_requests', false),  -- A2: guest_requests OFF
+  ('a1000000-0000-0000-0000-000000000002'::uuid, 'transfers', true),         -- A2: transfers ON
+  ('a1000000-0000-0000-0000-000000000002'::uuid, 'shifts', true),            -- A2: shifts ON
+  ('a1000000-0000-0000-0000-000000000003'::uuid, 'guest_requests', true),   -- B1: guest_requests ON
+  ('a1000000-0000-0000-0000-000000000003'::uuid, 'transfers', true),         -- B1: transfers ON
+  ('a1000000-0000-0000-0000-000000000003'::uuid, 'shifts', false)            -- B1: shifts OFF
+) as v(property_id, module_slug, enabled)
+join modules m on m.slug = v.module_slug;
 
 -- ---------------------------------------------------------------------------
--- roles / permissions / role_permissions
+-- Illustrative module-specific permissions — NOT part of the system
+-- baseline (0009 only bootstraps core.* permissions). These exist purely so
+-- the demo role_permissions below can exercise entitlement + permission
+-- together; a real module defines its own permission slugs when it
+-- actually migrates (see docs/module-integration.md), these are stand-ins.
 -- ---------------------------------------------------------------------------
-insert into roles (id, slug, display_name, scope) values
-  ('a3000000-0000-0000-0000-000000000001', 'organization_admin', 'Organization Admin', 'organization'),
-  ('a3000000-0000-0000-0000-000000000002', 'property_admin', 'Property Admin', 'property'),
-  ('a3000000-0000-0000-0000-000000000003', 'manager', 'Manager', 'property'),
-  ('a3000000-0000-0000-0000-000000000004', 'receptionist', 'Receptionist', 'property');
+insert into permissions (slug, module_id)
+select 'shifts.use', id from modules where slug = 'shifts'
+union all
+select 'transfers.use', id from modules where slug = 'transfers'
+union all
+select 'guest_requests.view', id from modules where slug = 'guest_requests'
+on conflict (slug) do nothing;
 
-insert into permissions (id, slug, module_id) values
-  ('a4000000-0000-0000-0000-000000000001', 'core.organization.manage', null),
-  ('a4000000-0000-0000-0000-000000000002', 'core.property.manage', null),
-  ('a4000000-0000-0000-0000-000000000003', 'core.staff.manage', null),
-  ('a4000000-0000-0000-0000-000000000004', 'shifts.use', 'a2000000-0000-0000-0000-000000000003'),
-  ('a4000000-0000-0000-0000-000000000005', 'transfers.use', 'a2000000-0000-0000-0000-000000000002'),
-  ('a4000000-0000-0000-0000-000000000006', 'guest_requests.view', 'a2000000-0000-0000-0000-000000000001');
-
--- organization_admin: everything.
--- property_admin: everything except organization-level administration.
--- manager: every module, no staff/property administration
---   (matches the Architecture Proposal's own example: "Manager -> puo usare
---   tutti i moduli -> puo gestire staff" — staff management included).
--- receptionist: transfers + guest_requests only, no configuration
+-- role_permissions for these demo permissions — the four system roles
+-- already have their core.* grants from migration 0009; this only adds the
+-- module-specific ones on top.
+-- organization_admin / property_admin / manager: every module.
+-- receptionist: transfers + guest_requests only, no shifts
 --   ("Receptionist -> puo usare Transfers -> puo vedere Guest Requests ->
 --   non puo modificare configurazione hotel").
-insert into role_permissions (role_id, permission_id) values
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000001'),
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000002'),
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000003'),
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000004'),
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000005'),
-  ('a3000000-0000-0000-0000-000000000001', 'a4000000-0000-0000-0000-000000000006'),
-  ('a3000000-0000-0000-0000-000000000002', 'a4000000-0000-0000-0000-000000000002'),
-  ('a3000000-0000-0000-0000-000000000002', 'a4000000-0000-0000-0000-000000000003'),
-  ('a3000000-0000-0000-0000-000000000002', 'a4000000-0000-0000-0000-000000000004'),
-  ('a3000000-0000-0000-0000-000000000002', 'a4000000-0000-0000-0000-000000000005'),
-  ('a3000000-0000-0000-0000-000000000002', 'a4000000-0000-0000-0000-000000000006'),
-  ('a3000000-0000-0000-0000-000000000003', 'a4000000-0000-0000-0000-000000000003'),
-  ('a3000000-0000-0000-0000-000000000003', 'a4000000-0000-0000-0000-000000000004'),
-  ('a3000000-0000-0000-0000-000000000003', 'a4000000-0000-0000-0000-000000000005'),
-  ('a3000000-0000-0000-0000-000000000003', 'a4000000-0000-0000-0000-000000000006'),
-  ('a3000000-0000-0000-0000-000000000004', 'a4000000-0000-0000-0000-000000000005'),
-  ('a3000000-0000-0000-0000-000000000004', 'a4000000-0000-0000-0000-000000000006');
+insert into role_permissions (role_id, permission_id)
+select r.id, p.id from roles r, permissions p
+where (r.slug, p.slug) in (
+  ('organization_admin', 'shifts.use'),
+  ('organization_admin', 'transfers.use'),
+  ('organization_admin', 'guest_requests.view'),
+  ('property_admin', 'shifts.use'),
+  ('property_admin', 'transfers.use'),
+  ('property_admin', 'guest_requests.view'),
+  ('manager', 'shifts.use'),
+  ('manager', 'transfers.use'),
+  ('manager', 'guest_requests.view'),
+  ('receptionist', 'transfers.use'),
+  ('receptionist', 'guest_requests.view')
+)
+on conflict (role_id, permission_id) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- profiles / memberships — needs real auth.users rows first
@@ -122,12 +125,17 @@ insert into role_permissions (role_id, permission_id) values
 --   ('00000000-0000-0000-0000-0000000a0004', 'B1 Receptionist (seed)'),
 --   ('00000000-0000-0000-0000-0000000a0005', 'Suspended User (seed)');
 --
--- insert into memberships (profile_id, organization_id, role_id, status) values
---   ('00000000-0000-0000-0000-0000000a0001', 'a0000000-0000-0000-0000-000000000001', 'a3000000-0000-0000-0000-000000000001', 'active');
+-- insert into memberships (profile_id, organization_id, role_id, status)
+-- select '00000000-0000-0000-0000-0000000a0001', 'a0000000-0000-0000-0000-000000000001', id, 'active'
+-- from roles where slug = 'organization_admin';
 --
--- insert into memberships (profile_id, property_id, role_id, status) values
---   ('00000000-0000-0000-0000-0000000a0002', 'a1000000-0000-0000-0000-000000000001', 'a3000000-0000-0000-0000-000000000004', 'active'),
---   ('00000000-0000-0000-0000-0000000a0002', 'a1000000-0000-0000-0000-000000000002', 'a3000000-0000-0000-0000-000000000004', 'active'),
---   ('00000000-0000-0000-0000-0000000a0003', 'a1000000-0000-0000-0000-000000000001', 'a3000000-0000-0000-0000-000000000003', 'active'),
---   ('00000000-0000-0000-0000-0000000a0004', 'a1000000-0000-0000-0000-000000000003', 'a3000000-0000-0000-0000-000000000004', 'active'),
---   ('00000000-0000-0000-0000-0000000a0005', 'a1000000-0000-0000-0000-000000000001', 'a3000000-0000-0000-0000-000000000004', 'suspended');
+-- insert into memberships (profile_id, property_id, role_id, status)
+-- select v.profile_id, v.property_id, r.id, v.status
+-- from (values
+--   ('00000000-0000-0000-0000-0000000a0002'::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid, 'receptionist', 'active'),
+--   ('00000000-0000-0000-0000-0000000a0002'::uuid, 'a1000000-0000-0000-0000-000000000002'::uuid, 'receptionist', 'active'),
+--   ('00000000-0000-0000-0000-0000000a0003'::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid, 'manager', 'active'),
+--   ('00000000-0000-0000-0000-0000000a0004'::uuid, 'a1000000-0000-0000-0000-000000000003'::uuid, 'receptionist', 'active'),
+--   ('00000000-0000-0000-0000-0000000a0005'::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid, 'receptionist', 'suspended')
+-- ) as v(profile_id, property_id, role_slug, status)
+-- join roles r on r.slug = v.role_slug;

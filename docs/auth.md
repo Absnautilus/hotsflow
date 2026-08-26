@@ -33,6 +33,17 @@ proposito"). RLS has no `INSERT` policy for `authenticated` on `profiles`;
 the first profile on a fresh project is necessarily created by a service-role
 script or through Studio.
 
+## Inviting staff also assigns a role — same hierarchy rule applies
+
+Creating a `memberships` row (the "invite" step) necessarily sets an
+initial `role_id`. As of Fase 1.1, `memberships_insert`'s policy calls the
+same `role_assignment_allowed()` function `assign_membership_role()` uses
+for later changes (see `permissions.md`'s hierarchy section) — a manager
+inviting someone can only hand them a role below the manager's own rank,
+exactly as if they'd assigned it after the fact. There's no separate
+"invite" RPC and none is planned unless a real need for one shows up; the
+plain `INSERT` policy already carries the same guarantee.
+
 ## What "one login for hotel staff" actually means
 
 Two of the three existing modules already run on Supabase Auth

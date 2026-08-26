@@ -16,8 +16,8 @@ values (
   'room_surname', 10, 'test-008-token', now() + interval '1 day'
 );
 
-set local role authenticated;
-
+-- No role switch — see 006's comment: guest_session_is_valid() has no
+-- client-facing grant as of Fase 1.1, this tests its logic directly.
 select ok(
   not guest_session_is_valid(
     '00000008-0000-0000-0000-000000000061'::uuid,

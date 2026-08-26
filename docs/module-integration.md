@@ -52,10 +52,18 @@ core table a module writes its own business data into.
    what that means concretely, including the `transfers`-specific path
    (NextAuth stays, only what `authorize()` checks against changes).
 5. **Register the module**: a row in `modules` (once, ever) and a
-   `property_modules` row per property that has it enabled.
+   `property_modules` row per property that has it enabled. As of Fase 1.1
+   this is service-role/migration only for any module (see `permissions.md`)
+   — a hotel's own staff, including `property_admin`, cannot self-enable a
+   module by writing to `property_modules` directly, and neither can a
+   module's own backend code running as `authenticated`.
 6. **Replace local tenant/auth checks with the Core SDK.** The module's own
    RLS policies call `has_permission()`/`has_module()` directly (see
-   `rls.md`'s worked example) instead of reimplementing the same logic.
+   `rls.md`'s worked example) instead of reimplementing the same logic. If a
+   module ever needs its own internal staff hierarchy (e.g. a shift lead who
+   outranks regular staff but isn't a `manager`), the `roles.rank` +
+   `role_assignment_allowed()` pattern in `permissions.md` is meant to be
+   reused, not reinvented per module.
 7. **UI and business logic stay untouched.** Nothing about this changes what
    the module *does* — only how it answers "who is this, what property, can
    they do this."

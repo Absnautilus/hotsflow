@@ -17,8 +17,11 @@ values (
   'room_surname', 10, 'test-006-token', now() - interval '2 days', now() - interval '1 hour'
 );
 
-set local role authenticated;
-
+-- No role switch: as of Fase 1.1, guest_session_is_valid() has no grant for
+-- any client role (see migration 0011 / test 016) — it's only reachable
+-- from inside another SECURITY DEFINER function, which this test isn't.
+-- Running as the connecting (superuser) role tests the function's own
+-- logic directly; whether a client can reach it at all is 016's concern.
 select ok(
   not guest_session_is_valid(
     '00000006-0000-0000-0000-000000000061'::uuid,
