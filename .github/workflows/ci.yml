@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sdk:
+    name: Core SDK — typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  database:
+    name: Database — migrations + seed + pgTAP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The Supabase CLI's local stack is Docker-based. Not available in the
+      # sandbox this project was developed in (see supabase/migrations'
+      # comments on why src/types/database.ts was hand-written instead of
+      # generated) — ubuntu-latest ships Docker preinstalled, so this job is
+      # the first real, end-to-end run of what was previously only verified
+      # by hand against a bare Postgres + manually installed pgTAP.
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase stack
+        run: supabase start
+      - name: Apply migrations + seed.sql
+        run: supabase db reset
+      - name: Run pgTAP suite
+        run: supabase test db
