@@ -173,6 +173,26 @@ small and reversible):** create ONE disposable test user on the Hotsflow
 project via the Admin API with an explicit `id`, record only whether the
 id was honored or replaced (no other data), then delete it.
 
+**Empirical test result (run 2026-09-02, against the Hotsflow project's
+GoTrue Admin endpoint directly, disposable user immediately deleted after):
+the explicit `id` was honored.** The created user's `id` came back exactly
+as requested. This confirms the undocumented behavior exists on the
+current implementation — it does not change the documented/supported
+status above, and does not by itself decide whether production depends on
+it. That's still a separate, open decision (see "Decisions — status"
+below): §D's explicit-remapping fallback remains the default-safe design
+regardless of this result, since undocumented behavior can change without
+notice on a future Supabase/GoTrue update.
+
+One incidental finding from running this test, unrelated to its result:
+the Hotsflow project uses Supabase's newer Publishable/Secret API key
+format (`sb_secret_...`), not the legacy `service_role` JWT — same
+privilege level, different naming. Also, Supabase's gateway refuses a
+secret key on any request whose `User-Agent` looks browser-like (a
+deliberate safeguard against a secret key ending up in client-side code) —
+the test needed an explicit non-browser `User-Agent` override to get past
+it, which is a useful thing to know for §L's real migration script too.
+
 ---
 
 ## C. Preserve IDs — table by table
@@ -466,7 +486,7 @@ cutover as a fallback, not deleting immediately).
 
 | Risk | Level | Why |
 |---|---|---|
-| `auth.users` UUID preservation not supported by the documented API | **HIGH** | Default plan (§D fallback) is explicit remapping, not dependent on this. An empirical test may still be run as an experiment, but a success does not by itself authorize depending on undocumented behavior in production — that would be a separate, explicit decision. |
+| `auth.users` UUID preservation not supported by the documented API | **HIGH** (unchanged despite a successful empirical test) | The 2026-09-02 test confirmed the current implementation honors an explicit `id`, but this is undocumented behavior that could change without notice. Default plan (§D fallback) is explicit remapping, not dependent on it. Whether to instead depend on the empirical behavior for the real migration is still an open, explicit decision — a successful test doesn't resolve the risk by itself. |
 | Password/login continuity requires reset/reinvite | **HIGH** | Real user-facing friction on cutover day — needs to be communicated to staff in advance, not discovered by them. |
 | Rollback after new writes land on the new backend | **HIGH** | Inherently a manual judgment call (§I.3) — cannot be fully automated or pre-scripted. |
 | `pms_integrations` secret handling | MEDIUM | `ohip_client_secret`/`ohip_client_id`/`ohip_app_key` must never appear in a migration script's committed text, a log, or this document — only presence checks, never values. |
