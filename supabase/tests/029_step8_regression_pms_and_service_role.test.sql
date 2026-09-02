@@ -98,23 +98,35 @@ select ok(
   'service_role has SELECT/INSERT/UPDATE/DELETE on staff_profiles (the table the live regression broke)'
 );
 
--- information_schema.role_table_grants (not pg_tables + has_table_privilege
--- per row) -- the latter blew up on at least one catalog-listed relation
--- that has_table_privilege couldn't resolve (a migration-tracking table
--- some local Supabase CLI versions place directly in public), which isn't
--- a table this check needs to reason about anyway.
+-- has_table_privilege() via an oid-based join against pg_class (not
+-- information_schema.role_table_grants, and not has_table_privilege() fed
+-- a textual 'public.'||tablename per row): role_table_grants only surfaces
+-- grants where the grantor or grantee is a role the CURRENT connecting
+-- role is itself "currently enabled" as (see the Postgres docs for that
+-- view) -- it silently under-reports real, effective privileges recorded
+-- against a role the test-runner connection isn't a member of, which is
+-- exactly what made this assertion fail against every table even right
+-- after 20260827122400's explicit GRANT ALL had actually applied (verified
+-- directly: has_table_privilege('service_role', 'public.staff_profiles',
+-- 'SELECT') is true there). has_table_privilege() reports the true
+-- effective privilege regardless of the connecting role's own membership,
+-- which is what this check actually needs. The oid join (not a textual
+-- 'public.'||tablename argument) is what a plain pg_tables + textual
+-- has_table_privilege() loop originally crashed on -- some local Supabase
+-- CLI versions place a migration-tracking relation directly in public that
+-- pg_tables lists but whose textual name has_table_privilege can't
+-- resolve; joining has_table_privilege(c.oid, priv) straight off pg_class
+-- sidesteps name resolution entirely.
 select is(
-  (select count(distinct t.tablename)::int
-   from pg_tables t
-   where t.schemaname = 'public'
-     and t.tablename !~ '^(schema_migrations|_test029_.*)$'
+  (select count(distinct c.relname)::int
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind = 'r'
+     and c.relname !~ '^(schema_migrations|_test029_.*)$'
      and not exists (
        select 1 from (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) as need(priv)
-       where not exists (
-         select 1 from information_schema.role_table_grants g
-         where g.table_schema = 'public' and g.table_name = t.tablename
-           and g.grantee = 'service_role' and g.privilege_type = need.priv
-       )
+       where not has_table_privilege('service_role', c.oid, need.priv)
      )),
   0,
   'service_role has full SELECT/INSERT/UPDATE/DELETE on every real table in the public schema, not just staff_profiles'
@@ -144,7 +156,7 @@ select set_eq(
      join pg_namespace n on n.oid = da.defaclnamespace
      where n.nspname = 'public'
        and exists (select 1 from aclexplode(da.defaclacl) x join pg_roles gr on gr.oid = x.grantee where gr.rolname = 'service_role') $$,
-  $$ values ('r'), ('S'), ('f') $$,
+  $$ values ('r'::"char"), ('S'::"char"), ('f'::"char") $$,
   'the recorded default-ACL entries granting service_role in schema public are scoped to exactly relations (r), sequences (S) and functions (f) -- not schemas, types, or anything broader'
 );
 

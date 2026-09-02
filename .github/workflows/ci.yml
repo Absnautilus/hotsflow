@@ -37,7 +37,5 @@ jobs:
         run: supabase start
       - name: Apply migrations + seed.sql
         run: supabase db reset
-      - name: TEMP diagnostic -- local grant/default-privilege investigation
-        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f _diag_step9.sql
       - name: Run pgTAP suite
         run: supabase test db

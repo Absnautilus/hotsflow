@@ -90,11 +90,23 @@ select is(
   true,
   'sanity: H2''s own entitlement was never touched by any of the H1 toggling above'
 );
+-- Scoped to this file's own two hotels via legacy_property_mapping, not a
+-- raw count over all of property_modules: seed.sql's own demo properties
+-- (A1, A2, B1) already carry 3 guest_requests rows of their own (A1 and B1
+-- enabled, A2 explicitly disabled -- disabled still means a row exists),
+-- so an unscoped count is never 2 against real seed data, only against an
+-- empty database. The property-scoping property this test actually cares
+-- about doesn't need a global count -- it only needs each of THIS test's
+-- two properties to carry its own independent row, which the join below
+-- proves directly.
 select is(
-  (select count(distinct property_id)::int from property_modules
-   join modules on modules.id = property_modules.module_id and modules.slug = 'guest_requests'),
+  (select count(distinct pm.property_id)::int
+   from property_modules pm
+   join modules mod on mod.id = pm.module_id and mod.slug = 'guest_requests'
+   join legacy_property_mapping m on m.platform_property_id = pm.property_id
+   where m.legacy_hotel_id in ('00000024-0000-0000-0000-00000000ff01', '00000024-0000-0000-0000-00000000ff02')),
   2,
-  'sanity: entitlement rows exist independently per property (2 total), not a single org-wide flag'
+  'sanity: entitlement rows exist independently per property (2 total for this test''s own properties), not a single org-wide flag'
 );
 
 select * from finish();
