@@ -100,7 +100,13 @@ begin
     union all
     select v_hotel_id, 'manual'::stay_source, null::text, null::text, null::text,
       false, null::timestamptz, null::text, null::text
-    where not exists (select 1 from pms_integrations where hotel_id = v_hotel_id);
+    -- aliased `x` deliberately -- see 20260827122300's own header: this
+    -- exact unqualified-hotel_id ambiguity (the function's `returns table
+    -- (hotel_id uuid, ...)` clause implicitly declares a plpgsql variable
+    -- named hotel_id for every OUT column) has already been reintroduced
+    -- once before by a CREATE OR REPLACE that copied this function body
+    -- without preserving the alias. Not repeating that mistake a third time.
+    where not exists (select 1 from pms_integrations x where x.hotel_id = v_hotel_id);
 end;
 $$;
 
