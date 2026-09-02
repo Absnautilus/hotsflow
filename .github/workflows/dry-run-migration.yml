@@ -1,0 +1,29 @@
+name: Production data migration — dry run (disposable, local only)
+
+# Manual only. This workflow never touches the legacy Housekeeping project
+# or the real Hotsflow project -- it spins up a throwaway local Supabase
+# stack inside the runner (same mechanism ci.yml's database job already
+# uses), seeds SYNTHETIC data shaped like the real production hotel (see
+# docs/production-data-migration-plan.md), and exercises the real
+# migration script end to end, including two deliberate failure
+# injections and their rollback procedures. The runner and everything it
+# creates is destroyed when the job ends.
+on:
+  workflow_dispatch:
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase stack
+        run: supabase start
+      - name: Apply migrations + seed.sql
+        run: supabase db reset
+      - name: Run migration dry-run
+        run: |
+          chmod +x scripts/dry-run/orchestrate.sh
+          scripts/dry-run/orchestrate.sh

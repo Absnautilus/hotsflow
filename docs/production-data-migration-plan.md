@@ -312,6 +312,15 @@ already proven safe for the Hotel Demo 3 fixture, applied to the real hotel
 instead of a demo one. Shown for review — **not executed**.
 
 ```sql
+-- STEP 0 — the hotel row itself. Found missing from this section during
+-- the dry-run (docs/production-data-migration-plan dry-run findings,
+-- scripts/dry-run/10_migrate_hotel.sql): legacy_property_mapping
+-- references hotels(id), so that row must exist first — it does not
+-- pre-exist for the real production hotel any more than it did for the
+-- dry-run's synthetic one.
+insert into hotels (id, name, timezone, active)
+values ('25b00bec-1602-46e9-bf52-a4913ebb5bdb', '<hotel name>', '<timezone>', true);
+
 -- STEP 1 — organization + property + legacy_property_mapping, this hotel only
 insert into organizations (name, slug) values ('<hotel name>', '<slug>')
   returning id as v_org_id;
@@ -321,8 +330,12 @@ insert into properties (organization_id, name, slug, timezone, status)
 insert into legacy_property_mapping (legacy_hotel_id, platform_property_id)
   values ('25b00bec-1602-46e9-bf52-a4913ebb5bdb', v_property_id);
 
--- STEP 2 — one membership per migrated staff_profiles row (after §B is
--- resolved and staff_profiles/profiles/auth.users rows exist)
+-- STEP 2 — entitlement, this property only
+insert into property_modules (property_id, module_id, enabled)
+select v_property_id, id, true from modules where slug = 'guest_requests';
+
+-- STEP 3 — one membership per migrated staff_profiles row (after §B.1's
+-- remapping table is populated with real auth ids)
 --   admin      -> role 'property_admin', property_id = v_property_id
 --   operatore  -> role 'receptionist',   property_id = v_property_id
 --   master     -> role 'organization_admin', organization_id = v_org_id
@@ -331,9 +344,13 @@ insert into legacy_property_mapping (legacy_hotel_id, platform_property_id)
 -- status: staff_profiles.active = true -> 'active', false -> 'suspended'
 -- (same mapping the whole-table function uses, applied per row here)
 
--- STEP 3 — entitlement, this property only
-insert into property_modules (property_id, module_id, enabled)
-select v_property_id, id, true from modules where slug = 'guest_requests';
+-- STEP 4 — staff_profiles itself (module-local, id preserved per §C),
+-- rooms/request_categories/request_types (full migration, own ids
+-- preserved), stays (active only, §E), guest_requests (open only, §E).
+-- Full, executable version of steps 0-4: scripts/dry-run/10_migrate_hotel.sql
+-- (parameterized for the dry-run's synthetic hotel; the real run substitutes
+-- the real hotel's id/name and the real legacy source instead of
+-- legacy_dryrun.*).
 ```
 
 Check now (read-only, safe to run any time) whether production actually has
@@ -418,6 +435,15 @@ migration script run against the synthetic dataset
 This reuses infrastructure that already exists (the CI job) rather than
 inventing a new environment, and never touches the real legacy or Hotsflow
 projects. Only once this passes cleanly does §L's real-data run happen.
+
+**Implementation:** `scripts/dry-run/` (seed, migration, reconciliation
+SQL, and the orchestrating shell script covering all 13 dry-run checks) plus
+`.github/workflows/dry-run-migration.yml` (manual-trigger-only, spins up
+the same Docker-based local stack `ci.yml`'s `database` job uses, runs the
+orchestrator, destroys everything on exit). Run via GitHub Actions rather
+than locally because this development environment has the Supabase CLI but
+no reachable Docker daemon — the same constraint `ci.yml`'s own header
+comment already documents for the same reason.
 
 ---
 
