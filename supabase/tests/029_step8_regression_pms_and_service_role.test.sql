@@ -119,14 +119,17 @@ select ok(
 -- sidesteps name resolution entirely.
 select diag(format('TEMP DIAG: current_user=%s session_user=%s role=%s',
   current_user, session_user, current_setting('role')));
-select diag(format('TEMP DIAG: %s sel_oid=%s sel_text=%s',
+select diag(format('TEMP DIAG: %s sel=%s ins=%s upd=%s del=%s',
   c.relname,
   has_table_privilege('service_role', c.oid, 'SELECT'),
-  has_table_privilege('service_role', 'public.'||c.relname, 'SELECT')))
+  has_table_privilege('service_role', c.oid, 'INSERT'),
+  has_table_privilege('service_role', c.oid, 'UPDATE'),
+  has_table_privilege('service_role', c.oid, 'DELETE')))
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind = 'r'
-order by c.relname;
+order by c.relname
+limit 3;
 
 select is(
   (select count(distinct c.relname)::int
