@@ -197,6 +197,10 @@ select count(*) from auth.users where id = '11111111-1111-1111-1111-111111111111
 rather than treating "I clicked delete" as sufficient on its own — confirm
 the row is actually gone before considering this test closed out.
 
+**Cleanup confirmed (2026-09-02):** the disposable test user was deleted
+from the live Hotsflow project via Studio. No residual fixture from this
+experiment remains.
+
 ### B.1 Before any dry-run: five explicit questions on the UUID dependency
 
 **1. What happens if the API stops accepting an explicit UUID in the
