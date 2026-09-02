@@ -10,15 +10,13 @@ begin;
 create extension if not exists pgtap;
 select plan(4);
 
-select unlike(
-  pg_get_functiondef('public.notify_new_request()'::regprocedure),
-  '%YOUR_PROJECT_REF%',
+select ok(
+  pg_get_functiondef('public.notify_new_request()'::regprocedure) not like '%YOUR_PROJECT_REF%',
   'notify_new_request() must not contain the YOUR_PROJECT_REF placeholder'
 );
 
-select unlike(
-  pg_get_functiondef('public.notify_new_request()'::regprocedure),
-  '%YOUR_ANON_KEY%',
+select ok(
+  pg_get_functiondef('public.notify_new_request()'::regprocedure) not like '%YOUR_ANON_KEY%',
   'notify_new_request() must not contain the YOUR_ANON_KEY placeholder'
 );
 
