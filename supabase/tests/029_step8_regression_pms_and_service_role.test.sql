@@ -98,18 +98,26 @@ select ok(
   'service_role has SELECT/INSERT/UPDATE/DELETE on staff_profiles (the table the live regression broke)'
 );
 
+-- information_schema.role_table_grants (not pg_tables + has_table_privilege
+-- per row) -- the latter blew up on at least one catalog-listed relation
+-- that has_table_privilege couldn't resolve (a migration-tracking table
+-- some local Supabase CLI versions place directly in public), which isn't
+-- a table this check needs to reason about anyway.
 select is(
-  (select count(*)::int
+  (select count(distinct t.tablename)::int
    from pg_tables t
    where t.schemaname = 'public'
-     and not (
-       has_table_privilege('service_role', 'public.' || quote_ident(t.tablename), 'SELECT')
-       and has_table_privilege('service_role', 'public.' || quote_ident(t.tablename), 'INSERT')
-       and has_table_privilege('service_role', 'public.' || quote_ident(t.tablename), 'UPDATE')
-       and has_table_privilege('service_role', 'public.' || quote_ident(t.tablename), 'DELETE')
+     and t.tablename !~ '^(schema_migrations|_test029_.*)$'
+     and not exists (
+       select 1 from (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) as need(priv)
+       where not exists (
+         select 1 from information_schema.role_table_grants g
+         where g.table_schema = 'public' and g.table_name = t.tablename
+           and g.grantee = 'service_role' and g.privilege_type = need.priv
+       )
      )),
   0,
-  'service_role has full SELECT/INSERT/UPDATE/DELETE on every table in the public schema, not just staff_profiles'
+  'service_role has full SELECT/INSERT/UPDATE/DELETE on every real table in the public schema, not just staff_profiles'
 );
 
 -- =========================================================================
