@@ -8,6 +8,22 @@ applicazioni separate che si aggancieranno progressivamente a questo core.
 Vedi l'Architecture Proposal approvata per il contesto completo (diagrammi, audit dei
 tre moduli esistenti, decisioni architetturali).
 
+## Stato — Fase 2 (migrazione `guest_requests`), Step 9
+
+Il backend condiviso è **provisionato e validato end-to-end** contro il
+progetto Supabase live (E2E reale via browser, `Housekeeping`
+`e2e-smoke.yml`). **Il cutover di produzione non è avvenuto**: Vercel di
+`guest_requests` punta ancora al vecchio progetto separato. Vedi
+`docs/fase2-guest-requests-migration.md` per lo stato completo — modello
+tenant/ruoli, deviazioni di sicurezza intenzionali, debito tecnico
+residuo, configurazioni non ancora infrastructure-as-code, procedura per
+nuove migration.
+
+Questo repository possiede **l'intera migration history condivisa** del
+progetto Supabase applicato in produzione — non solo lo schema del core:
+`supabase/migrations/` include sia `0001`–`0014` (core) sia le migration
+`guest_requests` rilocate e nuove (`YYYYMMDDHHMMSS_guest_requests_*.sql`).
+
 ## Stato — Fase 1.1 (Security Hardening) completata
 
 Fase 1:
@@ -28,11 +44,20 @@ Fase 1.1 — Security Hardening (`0008`–`0014`):
 - [x] audit log minimale sulle mutazioni membership sensibili
 - [x] CI GitHub Actions (`.github/workflows/ci.yml`)
 
-Nessuno dei tre moduli esistenti è stato toccato in nessuna delle due fasi.
+Nessuno dei tre moduli esistenti è stato toccato in Fase 1/1.1. `guest_requests`
+è stato toccato a partire da Fase 2 (vedi sopra) — `shifts` e `transfers`
+restano intatti.
 
-Criteri di successo (verificati end-to-end su un database pulito: le 14
+Criteri di successo di Fase 1.1 (verificati end-to-end su un database pulito: le 14
 migration → `seed.sql` → l'intera suite pgTAP, tutti insieme, come fa
-realmente `supabase test db`):
+realmente `supabase test db`). **Nota (Step 9):** questa frase è rimasta
+per mesi vera solo "a mano" — il job `database` di `ci.yml` ha fallito su
+ogni singolo run dalla sua introduzione fino a Step 9, per un artefatto
+solo-locale della Supabase CLI (non un problema di questi criteri stessi),
+root-causato e risolto in Step 9 (vedi
+`docs/fase2-guest-requests-migration.md`, sezione "Why CI needed a
+local-only-divergence fix"). Da quel fix in poi la frase è effettivamente
+verificata da CI, non solo dichiarata:
 
 - [x] conosce `organizations`
 - [x] conosce `properties`
@@ -49,6 +74,9 @@ realmente `supabase test db`):
 
 ```
 docs/
+  fase2-guest-requests-migration.md   stato Fase 2: modello legacy, deviazioni di
+                           sicurezza intenzionali, debito tecnico, config non-IaC,
+                           procedura nuove migration, stato produzione
   architecture.md         panoramica, cosa c'è e cosa manca deliberatamente
   data-model.md            le 10 tabelle: colonne, vincoli, indici
   auth.md                  flusso auth staff + come arrivare a un login unico lato hotel
