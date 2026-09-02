@@ -74,10 +74,42 @@ union all select 'auth_users', count(*) from auth.users
 order by 1;
 ```
 
-Everything below assumes small counts (single hotel, and this whole
-engagement's scale) but treats that as unverified until this query comes
-back — a large `guest_requests`/`stays` count changes §F (dry-run) and the
-HIGH/MEDIUM risk in §K about transaction size.
+**Result (run on legacy, 2026-09-02):**
+
+| table | count |
+|---|---|
+| `hotels` | 1 |
+| `staff_profiles` | 3 |
+| `rooms` | 7 |
+| `request_categories` | 6 |
+| `request_types` | 12 |
+| `stays` | 4 |
+| `stays_active` | 1 |
+| `guest_requests` | 25 |
+| `guest_requests_open` | 2 |
+| `pms_integrations` | 0 |
+| `guest_sessions` | 16 |
+| `guest_login_attempts` | 18 |
+| `push_subscriptions` | 3 |
+| `auth_users` | 3 |
+
+Confirmed, not assumed: this is a trivially small, single-hotel dataset.
+Concrete implications:
+- **Transaction size risk (§K) is resolved, not just mitigated** — every
+  table is in the single/low-double digits. One `begin;...commit;`
+  transaction for the whole migration is entirely adequate; no batching
+  needed.
+- **`pms_integrations` = 0** — this hotel has no PMS integration configured
+  at all. §A's "MIGRATE IF PRESENT" resolves concretely to "nothing to
+  migrate" for now; no OHIP secret exists yet for this hotel to handle
+  carefully. (Still true that if one is configured later, the same
+  presence-only verification in §G applies.)
+- **`auth_users` = 3 exactly matches `staff_profiles` = 3** — clean 1:1,
+  no orphan or unrelated Auth users to account for. Only 3 real accounts
+  go through the §B Auth-UUID test/remapping.
+- **`stays_active` = 1 of 4**, **`guest_requests_open` = 2 of 25** — matches
+  §E's active/open-only recommendation closely; only a handful of rows
+  actually need transactional migration, the rest is archive-export.
 
 ---
 
@@ -439,7 +471,7 @@ cutover as a fallback, not deleting immediately).
 | Rollback after new writes land on the new backend | **HIGH** | Inherently a manual judgment call (§I.3) — cannot be fully automated or pre-scripted. |
 | `pms_integrations` secret handling | MEDIUM | `ohip_client_secret`/`ohip_client_id`/`ohip_app_key` must never appear in a migration script's committed text, a log, or this document — only presence checks, never values. |
 | `guest_requests.note` free text may contain guest PII | MEDIUM | Needs a retention/redaction decision if archived rather than migrated. |
-| Transaction size unknown | MEDIUM | Pending §A's row-count query — a large `stays`/`guest_requests` count could need batching instead of one single transaction. |
+| ~~Transaction size unknown~~ | ~~MEDIUM~~ **RESOLVED** | §A's row counts came back trivially small (max 25 rows in any table) — one single transaction is adequate, no batching needed. |
 | Config tables (`hotels`, `rooms`, `request_categories`, `request_types`) | LOW | No PII, no secrets, fully under our control, same pattern already proven 3× this engagement for demo fixtures. |
 | Preserving self-owned UUIDs | LOW | Well-precedented, no external system depends on any of them except `hotels.id` (Vercel), which is the one we most want to preserve and can. |
 
