@@ -174,15 +174,99 @@ project via the Admin API with an explicit `id`, record only whether the
 id was honored or replaced (no other data), then delete it.
 
 **Empirical test result (run 2026-09-02, against the Hotsflow project's
-GoTrue Admin endpoint directly, disposable user immediately deleted after):
-the explicit `id` was honored.** The created user's `id` came back exactly
-as requested. This confirms the undocumented behavior exists on the
-current implementation — it does not change the documented/supported
-status above, and does not by itself decide whether production depends on
-it. That's still a separate, open decision (see "Decisions — status"
-below): §D's explicit-remapping fallback remains the default-safe design
-regardless of this result, since undocumented behavior can change without
-notice on a future Supabase/GoTrue update.
+GoTrue Admin endpoint directly):** the explicit `id` was honored — the
+created user's `id` came back exactly as requested
+(`11111111-1111-1111-1111-111111111111`). This confirms the undocumented
+behavior exists on the current implementation. It is classified as
+**empirically verified, not contractually guaranteed or documented** — it
+does not change the documented/supported status above, and does not by
+itself decide whether production depends on it or authorize building the
+final migration plan on the assumption that this capability is stable
+over time. A supported/documented strategy (§B.1 below) remains
+preferable where one exists.
+
+**Cleanup status: not yet confirmed.** The disposable test user
+(`auth-uuid-test-disposable@example.test`, id
+`11111111-1111-1111-1111-111111111111`) must be deleted from the live
+Hotsflow project — this experiment must not leave a residual fixture.
+This is a requirement, not an assumption: verify deletion with
+```sql
+select count(*) from auth.users where id = '11111111-1111-1111-1111-111111111111';
+-- expect 0
+```
+rather than treating "I clicked delete" as sufficient on its own — confirm
+the row is actually gone before considering this test closed out.
+
+### B.1 Before any dry-run: five explicit questions on the UUID dependency
+
+**1. What happens if the API stops accepting an explicit UUID in the
+future?** The migration script must not hard-code an assumption either
+way — it detects this at runtime, per user, not at design time for the
+whole batch: call `createUser()` with the explicit `id`, then read the
+`id` actually returned. If it matches, proceed. If it doesn't (behavior
+changed or was never available on a given run), fall back automatically
+to B.2's remapping table for that user instead of failing the whole
+migration. The script works correctly either way without needing to know
+in advance which case it's in.
+
+**2. Is there a documented/supported alternative mapping strategy?**
+Yes — **explicit remapping, not UUID preservation, is the
+documented/supported path.** Call `createUser({ email })` with no `id`
+(fully within documented behavior), capture whatever id GoTrue assigns,
+and record the pair in a lookup table:
+```sql
+create temporary table auth_uuid_remap (
+  legacy_auth_user_id uuid primary key,
+  new_auth_user_id uuid not null
+);
+```
+Every reference this migration writes (`staff_profiles.auth_user_id`,
+`profiles.id`, `memberships.profile_id`) uses `new_auth_user_id` from this
+table, never the legacy value. This was already sketched as §D's fallback;
+here it's confirmed as the actually-preferred, fully-documented default —
+not merely a fallback for if the empirical behavior fails, but the
+strategy to prefer regardless, per the instruction to favor a
+supported/documented approach when one exists.
+
+**3. Which FK/tables actually depend on the `auth.users` UUID being
+preserved?** Exactly three, all within Core's own schema, and all
+rewritable via the remapping table regardless of which id GoTrue assigns:
+`staff_profiles.auth_user_id` (FK → `auth.users.id`, unique),
+`profiles.id` (PK, FK → `auth.users.id`), `memberships.profile_id` (FK →
+`profiles.id`). Nothing outside this chain touches the Auth id directly —
+`guest_requests.accepted_by`/`created_by_staff` reference
+`staff_profiles.id` (our own PK, always preservable per §C), not the Auth
+id at all.
+
+**4. Is UUID preservation a requirement, or only a simplification?**
+**Only a simplification.** Given #3's scope, any value works as the Auth
+id as long as it's used consistently across those three columns — the
+remapping table guarantees that regardless of the actual id chosen.
+Nothing downstream depends on the *value* matching the legacy one, only
+on internal consistency. Preserving it saves one translation step; it is
+not required for correctness.
+
+**5. Precise rollback if part of the Auth migration succeeds and part
+fails** (e.g. 2 of 3 staff accounts created, the 3rd fails): this is not
+covered by §I.1's single-transaction rollback, because creating an
+`auth.users` row happens through an HTTP call to GoTrue, not a SQL
+statement inside the migration's transaction — a Postgres `ROLLBACK`
+cannot undo it. Explicit procedure:
+- Auth-user creation runs as its own isolated step, strictly *before* the
+  SQL provisioning transaction (§D/§I.1) starts, and that transaction only
+  begins once all required Auth users are confirmed created with their
+  ids captured — an explicit precondition check, not an assumption.
+- Track each `createUser()` call's outcome as it happens (not just at the
+  end).
+- On any failure partway through: **do not proceed to the SQL
+  transaction at all.** Delete every Auth user this run already created
+  successfully (via `admin.deleteUser()`, using the ids captured in the
+  previous step), so no orphaned `auth.users` row is left behind with no
+  corresponding application data. Then abort and retry from a clean
+  slate.
+- The dry-run (§F) should explicitly exercise this failure path — simulate
+  a failure partway through, verify the cleanup actually removes what
+  succeeded — not just the happy path.
 
 One incidental finding from running this test, unrelated to its result:
 the Hotsflow project uses Supabase's newer Publishable/Secret API key
@@ -205,7 +289,7 @@ it, which is a useful thing to know for §L's real migration script too.
 | `stays.id` | Yes (no compatibility payoff, but no harm) | Guest login is room+surname, not a URL carrying `stays.id` — nothing external needs this preserved, but preserving it costs nothing and keeps FK tracing clean. |
 | `guest_requests.id` | Yes | One thing worth noting for completeness: `notify-new-request`'s push payload embeds `requestId: record.id` in already-sent notifications' click-through URL — but those notifications are one-shot and push subscriptions aren't being migrated anyway (see §A), so this creates no ongoing dependency. |
 | `staff_profiles.id` | Yes | Our own table, not Auth's — no blocking dependency. |
-| `staff_profiles.auth_user_id` / `profiles.id` | **Pending §B's test** | The one id genuinely outside our control. If the Admin API doesn't honor a caller-supplied id, `staff_profiles.auth_user_id` on the new project will necessarily differ from the legacy one — everything else in this table stays preservable regardless. |
+| `staff_profiles.auth_user_id` / `profiles.id` | **No — simplification only, not required (see §B.1.4)** | The one id genuinely outside our control. The empirical test (§B) showed the current API *can* honor a caller-supplied id, but this is undocumented, not contractually guaranteed, and per §B.1 the documented/supported default is explicit remapping (§B.1.2) rather than depending on it — everything else in this table stays preservable regardless of which path is used. |
 
 Bottom line: every ID we mint ourselves is safe and recommended to preserve.
 The single exception is Auth-owned, and is a known open question, not an
@@ -259,11 +343,13 @@ select role, count(*) from staff_profiles group by role;
 No new roles/permissions needed — `property_admin`, `receptionist`,
 `organization_admin` already exist as seeded reference data.
 
-### Fallback: explicit Auth UUID remapping (default plan, per §B)
+### Default plan: explicit Auth UUID remapping (per §B.1.2)
 
 Since UUID preservation for `auth.users` is not supported by the documented
-API, the default (not undocumented-behavior-dependent) design is an
-explicit remapping table built during migration, not a silent id swap:
+API, the default (not undocumented-behavior-dependent) design — confirmed
+preferred, not just a fallback, per §B.1's five points — is an explicit
+remapping table built during migration, not a silent id swap. Same table
+as §B.1.2:
 
 ```sql
 create temporary table auth_uuid_remap (
