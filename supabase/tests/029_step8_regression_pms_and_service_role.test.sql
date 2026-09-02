@@ -117,6 +117,17 @@ select ok(
 -- pg_tables lists but whose textual name has_table_privilege can't
 -- resolve; joining has_table_privilege(c.oid, priv) straight off pg_class
 -- sidesteps name resolution entirely.
+\echo '--- TEMP DIAG: current_user/session_user inside 029 transaction ---'
+select current_user, session_user, current_setting('role') as role_setting;
+\echo '--- TEMP DIAG: per-table matrix inside 029 transaction ---'
+select c.relname,
+  has_table_privilege('service_role', c.oid, 'SELECT') as sel_oid,
+  has_table_privilege('service_role', 'public.'||c.relname, 'SELECT') as sel_text
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'r'
+order by c.relname;
+
 select is(
   (select count(distinct c.relname)::int
    from pg_class c

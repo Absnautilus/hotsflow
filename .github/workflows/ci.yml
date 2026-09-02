@@ -37,7 +37,5 @@ jobs:
         run: supabase start
       - name: Apply migrations + seed.sql
         run: supabase db reset
-      - name: TEMP diagnostic 2 -- service_role per-table/per-privilege matrix
-        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f _diag2.sql
       - name: Run pgTAP suite
         run: supabase test db
