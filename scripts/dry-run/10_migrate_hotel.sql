@@ -19,13 +19,19 @@ values ('99999999-0000-0000-0000-000000000001', 'Hotel Sample E2E Dry-Run', 'Eur
 on conflict (id) do nothing;
 
 -- STEP 1 — organization + property + legacy_property_mapping, this hotel only.
+-- PL/pgSQL only handles the idempotent branching; the property id it
+-- produces is handed back to plain psql-land via a temp table + \gset,
+-- because psql variable substitution (:'name') does NOT happen inside a
+-- do $$ ... $$ body -- dollar-quoted text is opaque to psql's substitution,
+-- which is exactly what broke this the first time this script ran (see
+-- the dry-run findings recorded in the plan).
+create temporary table if not exists _dryrun_ids (k text primary key, v uuid);
+
 do $$
 declare
   v_org_id uuid;
   v_property_id uuid;
   v_module_id uuid;
-  v_role_admin uuid;
-  v_role_op uuid;
 begin
   if exists (select 1 from legacy_property_mapping where legacy_hotel_id = '99999999-0000-0000-0000-000000000001') then
     select platform_property_id into v_property_id from legacy_property_mapping where legacy_hotel_id = '99999999-0000-0000-0000-000000000001';
@@ -45,24 +51,30 @@ begin
     values (v_property_id, v_module_id, true)
     on conflict (property_id, module_id) do nothing;
 
-  -- STEP 3 — profiles + memberships for the 3 remapped Auth users.
-  select id into v_role_admin from roles where slug = 'property_admin';
-  select id into v_role_op from roles where slug = 'receptionist';
-
-  insert into profiles (id, full_name) values (:'admin_id', 'Dry Run Admin') on conflict (id) do nothing;
-  insert into profiles (id, full_name) values (:'opa_id', 'Dry Run Operatore A') on conflict (id) do nothing;
-  insert into profiles (id, full_name) values (:'opb_id', 'Dry Run Operatore B') on conflict (id) do nothing;
-
-  if not exists (select 1 from memberships where profile_id = :'admin_id' and property_id = v_property_id) then
-    insert into memberships (profile_id, property_id, role_id, status) values (:'admin_id', v_property_id, v_role_admin, 'active');
-  end if;
-  if not exists (select 1 from memberships where profile_id = :'opa_id' and property_id = v_property_id) then
-    insert into memberships (profile_id, property_id, role_id, status) values (:'opa_id', v_property_id, v_role_op, 'active');
-  end if;
-  if not exists (select 1 from memberships where profile_id = :'opb_id' and property_id = v_property_id) then
-    insert into memberships (profile_id, property_id, role_id, status) values (:'opb_id', v_property_id, v_role_op, 'active');
-  end if;
+  insert into _dryrun_ids (k, v) values ('property_id', v_property_id)
+    on conflict (k) do update set v = excluded.v;
 end $$;
+
+select v as property_id from _dryrun_ids where k = 'property_id' \gset
+select id as role_admin_id from roles where slug = 'property_admin' \gset
+select id as role_op_id from roles where slug = 'receptionist' \gset
+
+-- STEP 3 — profiles + memberships for the 3 remapped Auth users. Plain
+-- top-level SQL (psql substitution works here), idempotent via
+-- ON CONFLICT against the real unique indexes.
+insert into profiles (id, full_name) values (:'admin_id', 'Dry Run Admin') on conflict (id) do nothing;
+insert into profiles (id, full_name) values (:'opa_id', 'Dry Run Operatore A') on conflict (id) do nothing;
+insert into profiles (id, full_name) values (:'opb_id', 'Dry Run Operatore B') on conflict (id) do nothing;
+
+insert into memberships (profile_id, property_id, role_id, status)
+  values (:'admin_id', :'property_id', :'role_admin_id', 'active')
+  on conflict (profile_id, property_id) where property_id is not null do nothing;
+insert into memberships (profile_id, property_id, role_id, status)
+  values (:'opa_id', :'property_id', :'role_op_id', 'active')
+  on conflict (profile_id, property_id) where property_id is not null do nothing;
+insert into memberships (profile_id, property_id, role_id, status)
+  values (:'opb_id', :'property_id', :'role_op_id', 'active')
+  on conflict (profile_id, property_id) where property_id is not null do nothing;
 
 -- STEP 4 — staff_profiles (module-local, id preserved from legacy_dryrun).
 insert into staff_profiles (id, hotel_id, auth_user_id, name, role, department, active, login_username)
