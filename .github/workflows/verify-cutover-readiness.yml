@@ -1,0 +1,57 @@
+name: Verify cutover readiness (real checks against the real Hotsflow project)
+
+# Manual only, confirm_project_ref-gated like deploy-migrations.yml --
+# this workflow WRITES a small amount of clearly-marked synthetic test
+# data to the real Hotsflow project's guest_requests tables (ids all
+# prefixed facade00-..., names all prefixed ZZ_..._DELETE_ME) so it can
+# fire the real webhook trigger end-to-end, and ALWAYS deletes everything
+# it created before finishing (trap-guaranteed cleanup, runs even on
+# failure). It never touches real business/guest data and never migrates
+# anything. It also confirms the new SUPABASE_SECRET_KEY secret is
+# recognized by the workflow environment without ever printing its value.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_project_ref:
+        description: "Type the target Supabase project ref to confirm (must match the SUPABASE_PROJECT_REF repo variable exactly)"
+        required: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify target project ref matches expectation
+        run: |
+          if [ "${{ inputs.confirm_project_ref }}" != "${{ vars.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::confirm_project_ref does not match the configured SUPABASE_PROJECT_REF repo variable -- refusing to proceed."
+            exit 1
+          fi
+          echo "Target project ref confirmed: ${{ vars.SUPABASE_PROJECT_REF }}"
+
+      - uses: actions/checkout@v4
+
+      - name: Verify SUPABASE_SECRET_KEY is set (value never printed)
+        env:
+          CHECK_VALUE: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          if [ -z "$CHECK_VALUE" ]; then
+            echo "::error::SUPABASE_SECRET_KEY is not set as a repository secret."
+            exit 1
+          fi
+          echo "SUPABASE_SECRET_KEY: present (${#CHECK_VALUE} characters). Value not displayed -- GitHub also auto-masks any occurrence of it in logs."
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Migration status (confirms 20260827122700 is applied on the real project)
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+
+      - name: Real webhook end-to-end test (synthetic fixture, created and deleted this run)
+        env:
+          DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: |
+          chmod +x scripts/verify/verify_webhook_live.sh
+          scripts/verify/verify_webhook_live.sh
