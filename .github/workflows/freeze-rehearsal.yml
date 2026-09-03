@@ -1,0 +1,30 @@
+name: Production cutover — freeze mechanism rehearsal (disposable, local only)
+
+# Manual only. This workflow never touches the legacy Housekeeping project
+# or the real Hotsflow project -- it spins up a throwaway local Supabase
+# stack inside the runner (same mechanism dry-run-migration.yml already
+# uses), seeds the already-validated synthetic hotel fixture, and exercises
+# the proposed freeze mechanism (runbook §3, cutover-readiness item E):
+# REVOKE -> verify writes blocked -> verify reads still work -> RESTORE ->
+# verify exact ACL match, plus a distinct failure-scenario recovery test
+# (REVOKE, simulated crash, recovery from a separate independent process).
+# The runner and everything it creates is destroyed when the job ends.
+on:
+  workflow_dispatch:
+
+jobs:
+  freeze-rehearsal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase stack
+        run: supabase start
+      - name: Apply migrations + seed.sql
+        run: supabase db reset
+      - name: Run freeze mechanism rehearsal
+        run: |
+          chmod +x scripts/freeze/orchestrate_freeze_rehearsal.sh
+          scripts/freeze/orchestrate_freeze_rehearsal.sh
