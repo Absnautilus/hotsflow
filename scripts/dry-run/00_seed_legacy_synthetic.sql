@@ -57,9 +57,12 @@ insert into legacy_source.stays (id, hotel_id, room_id, guest_last_name, check_i
   ('99999999-0000-0000-0000-000000004004', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000010004', 'Neri', now() - interval '30 day', now() - interval '28 day', 'cancelled');
 
 -- 2 open (requested/in_progress, tied to the active stay) + 23 historical (completed)
-insert into legacy_source.guest_requests (id, hotel_id, stay_id, room_number, request_type_id, status, assigned_department) values
-  ('99999999-0000-0000-0000-000000005001', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000004001', 'R101', '99999999-0000-0000-0000-000000030001', 'requested', 'housekeeping'),
-  ('99999999-0000-0000-0000-000000005002', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000004001', 'R101', '99999999-0000-0000-0000-000000030002', 'in_progress', 'reception');
+-- priority explicit and non-null: STEP 8 of 10_migrate_hotel.sql forwards
+-- gr.priority verbatim into a NOT NULL target column (no default applies
+-- once a value, even NULL, is given explicitly in the insert column list).
+insert into legacy_source.guest_requests (id, hotel_id, stay_id, room_number, request_type_id, status, assigned_department, priority) values
+  ('99999999-0000-0000-0000-000000005001', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000004001', 'R101', '99999999-0000-0000-0000-000000030001', 'requested', 'housekeeping', 1),
+  ('99999999-0000-0000-0000-000000005002', '99999999-0000-0000-0000-000000000001', '99999999-0000-0000-0000-000000004001', 'R101', '99999999-0000-0000-0000-000000030002', 'in_progress', 'reception', 2);
 insert into legacy_source.guest_requests (id, hotel_id, stay_id, room_number, request_type_id, status, assigned_department, archived_at)
   select ('99999999-0000-0000-0000-000000005' || lpad((10+n)::text, 3, '0'))::uuid,
     '99999999-0000-0000-0000-000000000001',

@@ -28,7 +28,18 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -v hotel_id="99999999-0000-0000-0000-000000000
   -f "$DRYRUN_DIR/10_migrate_hotel.sql" >/dev/null
 TOKEN="$(login_password 'freeze-admin@example.test' 'FreezeAdmin!234')"
 if [ "$TOKEN" = "FAILED" ]; then record "fixture" "FAIL (could not log in)"; exit 1; fi
-record "fixture" "PASS"
+# Login alone doesn't prove the migration transaction actually committed
+# (10_migrate_hotel.sql is one transaction -- a failure on any later step,
+# e.g. guest_requests, rolls back the hotel/property/membership/staff rows
+# too, and Auth user creation happens outside that transaction so login
+# would still succeed even though nothing else exists). Verify the rows
+# that attempt_write()/attempt_read() actually depend on are really there.
+FIXTURE_ROWS="$(psql "$DB_URL" -tAc "select count(*) from guest_requests where hotel_id = '99999999-0000-0000-0000-000000000001'")"
+if [ "$FIXTURE_ROWS" -lt 1 ]; then
+  record "fixture" "FAIL (login succeeded but migration did not land: guest_requests rows=$FIXTURE_ROWS -- check 10_migrate_hotel.sql output above)"
+  exit 1
+fi
+record "fixture" "PASS ($FIXTURE_ROWS guest_requests rows migrated)"
 
 attempt_write() {  # returns the HTTP status of a real INSERT via REST
   curl -s -o /dev/null -w '%{http_code}' -X POST "$API_URL/rest/v1/guest_requests" \
@@ -100,4 +111,21 @@ fi
 
 echo ""
 echo "=== FREEZE REHEARSAL SUMMARY ==="
-for r in "${RESULTS[@]}"; do echo "$r"; done
+FAILED=0
+for r in "${RESULTS[@]}"; do
+  echo "$r"
+  [[ "$r" == *": FAIL"* ]] && FAILED=1
+done
+
+# A green job here must mean every check actually recorded PASS, not just
+# that the script ran to completion -- set -uo pipefail alone does not
+# stop the script on a failed check (checks are expected to fail and be
+# recorded, not to abort the run), so the pass/fail verdict has to be
+# enforced explicitly as the job's own exit code.
+if [ "$FAILED" -eq 1 ]; then
+  echo ""
+  echo "FREEZE REHEARSAL: FAIL (see above)"
+  exit 1
+fi
+echo ""
+echo "FREEZE REHEARSAL: PASS"
