@@ -43,12 +43,25 @@ SQL
 }
 trap cleanup EXIT
 
-echo "=== Pre-check: no non-test rows in hotels (confirms no business data has been migrated yet) ==="
-PRE_COUNT="$(psql "$DB_URL" -tAc "select count(*) from hotels where id != '$HOTEL_ID'")"
-echo "hotels rows other than our test fixture: $PRE_COUNT"
+echo "=== Pre-check: the real legacy hotel (Palazzo Veneziano) has not been migrated yet ==="
+# Targeted, not a blanket "hotels must be empty" check: this project already
+# carries a few clearly-labeled Fase 2 platform demo/E2E fixtures (Hotel
+# Demo / Hotel Demo 2 (E2E Test) / Hotel Demo 3 (E2E cross-org boundary)),
+# confirmed by direct inspection (2026-09-03) to be unrelated synthetic
+# platform test data, not Housekeeping business data -- an absolute
+# emptiness check would false-positive on those forever. What actually
+# matters for cutover readiness is that the one real hotel this whole
+# migration is about has not landed yet.
+REAL_HOTEL_ID="25b00bec-1602-46e9-bf52-a4913ebb5bdb"
+PRE_COUNT="$(psql "$DB_URL" -tAc "select count(*) from hotels where id = '$REAL_HOTEL_ID' or name ilike '%veneziano%'")"
+echo "rows matching the real legacy hotel (id or name): $PRE_COUNT"
 if [ "$PRE_COUNT" != "0" ]; then
-  echo "!!! ABORT: hotels already contains $PRE_COUNT row(s) not created by this script."
-  echo "!!! This means real (or unexpected) data is already present. Refusing to proceed."
+  echo "!!! ABORT: the real hotel (Palazzo Veneziano) already appears to exist in hotels."
+  echo "!!! This means production data migration may already have happened. Refusing to proceed."
+  exit 1
+fi
+if [ "$HOTEL_ID" = "$REAL_HOTEL_ID" ]; then
+  echo "!!! ABORT: test fixture id collides with the real hotel id -- refusing to proceed."
   exit 1
 fi
 
