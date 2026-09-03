@@ -1,9 +1,11 @@
-# Production Migration Rehearsal — plan (pre-execution documentation)
+# Production Migration Rehearsal — plan and results
 
-Status: **NOT STARTED.** Nothing in this document has been executed. No
-real legacy data has been read, exported, or transferred anywhere. This is
-the documentation required before any real-data step runs, per explicit
-instruction.
+Status: **COMPLETE — all checks PASS.** Executed 2026-09-03 against a
+disposable local Supabase stack inside a GitHub Actions runner
+(`.github/workflows/rehearsal-migration.yml`, run
+[33757292899](https://github.com/Absnautilus/hotsflow/actions/runs/33757292899),
+attempt 2). Results in "Rehearsal Results" at the end of this document. No
+production data migration has started; no cutover has occurred.
 
 ## Access constraint that shapes this whole design
 
@@ -208,3 +210,196 @@ the right transformation together** — per instruction 2.
 Run these first and paste me the results (they contain only counts and
 enum labels, no personal data) — I'll confirm whether legacy matches the
 documented shape before we design the anonymized export queries in detail.
+
+---
+
+# Rehearsal Results
+
+**Source used:** legacy Housekeeping project, hotel id
+`25b00bec-1602-46e9-bf52-a4913ebb5bdb` ("Palazzo Veneziano"). Read entirely
+by the user directly in Studio; every value the export queries returned
+was already anonymized inline (no real name/email/PIN ever left legacy).
+
+**Target used:** disposable local Supabase stack inside a GitHub Actions
+runner (`ubuntu-latest`), destroyed when the job ended. Never the real
+legacy or Hotsflow projects.
+
+**Schema/version/commit:** hotsflow-core `main` @ `2347f68` (migrations
+through `20260827122700`). Scripts: `scripts/dry-run/00_seed_legacy_synthetic.sql`
+(dry-run only), `01_seed_legacy_rehearsal.sql` (real, anonymized — never
+committed), `10_migrate_hotel.sql`, `20_reconciliation.sql`,
+`orchestrate_rehearsal.sh`, `lib.sh`. Same `10_migrate_hotel.sql`/
+`20_reconciliation.sql` the dry-run used — no second implementation.
+
+**Legacy anomalies found (§2 validation, run before any export):** none.
+NULLs, duplicates, orphaned FKs, unexpected enum values, timestamp
+sanity, hotel/room consistency — all 0/clean across every check. One
+finding that isn't an "anomaly" but changed the migration script: a
+`master`-role staff member exists among the 3 real staff (the dry-run's
+synthetic data only had admin/operatore) — `10_migrate_hotel.sql` was
+extended with a master → `organization_admin` membership branch before
+this rehearsal ran, and the reconciliation script gained a dedicated
+check for it.
+
+**Transformations applied:** per docs §4 — `staff_profiles.name`,
+`login_username`, and email replaced inline in the export query;
+`stays.guest_last_name` replaced with a fixed placeholder; `guest_pin` and
+`guest_requests.note` never read at all. Every id, timestamp, role/
+department/status/enum value, room number, and category/type name
+preserved real (structural, not personal).
+
+**Row reconciliation — legacy total / migrated / intentionally excluded / unexpected loss:**
+
+| Table | legacy total | migrated | intentionally excluded | unexpected loss |
+|---|---|---|---|---|
+| hotels | 1 | 1 | 0 | 0 |
+| staff_profiles | 3 | 3 | 0 | 0 |
+| rooms | 7 | 7 | 0 | 0 |
+| request_categories | 6 | 6 | 0 | 0 |
+| request_types | 12 | 12 | 0 | 0 |
+| stays | 4 (1 active) | 1 | 3 (historical) | 0 |
+| guest_requests | 25 (2 open) | 2 | 23 (historical) | 0 |
+| guest_sessions | 16 | 0 | 16 (never migrated, by design) | 0 |
+| guest_login_attempts | 18 | 0 | 18 (never migrated, by design) | 0 |
+| push_subscriptions | 3 | 0 | 3 (moot — VAPID rotated) | 0 |
+| pms_integrations | 0 | 0 | 0 | 0 |
+
+PK preservation: 0 duplicates (staff_profiles, stays, guest_requests). FK
+integrity: 0 orphans (stays→room, requests→type, requests→stay). Hotel→
+property mapping: exactly 1 row, correct organization. Entitlement:
+`guest_requests` enabled=true for the real property. Active/suspended
+consistency: legacy_active=3, core_active=3 (equal).
+
+**Auth reconciliation:**
+
+| | count |
+|---|---|
+| legacy staff eligible | 3 |
+| Auth users created (remapping, no explicit id) | 3 (+1 for the synthetic "Hotel X" cross-property fixture) |
+| legacy_id → new_id mappings | 3 |
+| profiles created | 3 |
+| memberships created | 3 (2 property-scoped for admin/operatore-equivalent roles, 1 organization-scoped for the master role) |
+| staff_profiles migrated with correct auth_user_id | 3/3 |
+| login (real password grant) | 3/3 succeeded |
+| suspended/inactive staff | 0 among the 3 (none to test — real roster is 100% active) |
+
+**E2E results (real REST/RPC network calls against the disposable target, not raw SQL):**
+```
+login master                          PASS
+login operatore (reception)           PASS
+login operatore (housekeeping)        PASS
+roster (master sees all 3 staff)      PASS
+guest request queue (housekeeping)    PASS (2 visible, matches migrated count)
+status change (real PATCH via REST)   PASS (204)
+entitlement + PMS permission path     PASS (master has guest_requests.pms.manage)
+cross-property denial                 PASS (master denied on a separate synthetic org)
+```
+**Coverage gap, reported not hidden:** department-isolation could only be
+tested positively (housekeeping operatore correctly sees the 2
+housekeeping-assigned open requests) — real data has no open request
+assigned to a different department, so the negative case ("an operatore
+must NOT see another department's request") isn't exercisable with real
+data alone. Not a failure; a limit of this dataset's shape.
+
+**Rollback/idempotency results:**
+```
+idempotent full rerun                 PASS (no duplicate Auth user, guest_requests still =2)
+mid-Auth failure injection            PASS (0 orphaned rows, SQL phase correctly never ran)
+post-Auth SQL failure + rollback      PASS (transaction rolled back to 0 rows, orphaned Auth user cleaned up)
+```
+Both failure injections used entirely synthetic, throwaway accounts/hotels
+— per instruction, never risked real source data to simulate a failure.
+
+**Timing (ms, single run, local disposable stack — not representative of
+network latency to the real hosted projects):**
+
+| Phase | ms |
+|---|---|
+| export/seed | 480 |
+| Hotel X fixture seed | 44 |
+| Auth migration (3 real + 1 fixture user) | 679 |
+| SQL import | 112 |
+| reconciliation | 50 |
+| E2E (8 real network calls) | 496 |
+| idempotent rerun | 181 |
+| mid-Auth failure injection | 254 |
+| post-Auth SQL failure + rollback | 281 |
+| **total** | **2597** |
+
+At this data volume the actual migration work is trivial (under 3
+seconds); real production cutover timing will be dominated by the
+maintenance-window process (announcement, freeze, verification, DNS/env
+propagation — plan §H), not by the migration script itself.
+
+**Temporary artifacts created and destruction confirmed:**
+- `scripts/dry-run/01_seed_legacy_rehearsal.sql` (real anonymized seed):
+  never committed (confirmed — `.gitignore`'d, absent from every commit in
+  this repo's history); existed transiently on the runner's disk, removed
+  by an explicit `rm -f` step (confirmed in the job log) and again when
+  the runner itself was destroyed at job end.
+- Workflow_dispatch input carrying the base64-encoded anonymized seed:
+  not written into any step's log line (consumed via `env:`, not direct
+  interpolation) — the one residual exposure is that GitHub's own "run
+  inputs" metadata panel for this dispatch retains the value, a
+  limitation of the available channel (no secrets-management tool was
+  available to this session), not of the design; the data itself is
+  already anonymized, not raw legacy content.
+- Local scratchpad copies (base64 intermediate files) on this session's
+  own disk: deleted.
+- Disposable Supabase stack + everything created on it: destroyed
+  automatically when the GitHub Actions runner terminated.
+
+**Differences between this rehearsal and the future production execution:**
+1. This rehearsal's target was a disposable local stack, not the real
+   Hotsflow project — production execution talks to the real hosted
+   database over the network, with real latency and real connection
+   limits neither exercised here.
+2. The Auth-creation step here used GoTrue running inside the local
+   stack; production talks to the real hosted project's GoTrue instance —
+   same API, different network path and possibly different response
+   timing.
+3. The `master`-role handling (added specifically because this rehearsal
+   found it) has now been exercised end-to-end for the first time — no
+   longer an unknown, but this is its first and only real run so far.
+4. Department-isolation's negative case remains unverified (see the E2E
+   coverage-gap note above) — real production data doesn't currently
+   exercise it either, so this gap carries forward, not something the
+   rehearsal introduced.
+5. Timing here (2.6s total) reflects a tiny dataset on zero-latency
+   localhost; it is not a projection for a maintenance-window duration —
+   see plan §H for that runbook, informed by but not equal to this number.
+
+**Residual technical risks:**
+- HIGH (unchanged from the main plan, not resolved by this rehearsal):
+  rollback after real writes land on the new backend post-cutover is
+  still a manual judgment call (plan §I.3) — this rehearsal validated the
+  *pre-cutover* rollback paths (mid-Auth, post-Auth-SQL), not that one,
+  which by its nature can't be rehearsed against synthetic data.
+- MEDIUM: department-isolation negative case unverified (see above).
+- MEDIUM: the workflow_dispatch input channel used to move anonymized
+  data onto the runner has a residual metadata-visibility limitation (see
+  "Temporary artifacts" above) — acceptable for anonymized data, would
+  need a different mechanism (e.g. a proper secrets API) if ever reused
+  for less-anonymized content.
+- LOW: `pms_integrations` had 0 rows to migrate — the presence-only
+  verification path (plan §G) remains logically sound but has never
+  actually run against a non-empty row.
+
+**Runbook changes needed:** none to the migration script itself — it ran
+correctly on the first successful attempt against real data (after the
+master-role extension made before this run). Two operational notes for
+the real cutover runbook (plan §L), not code changes:
+1. Confirm no suspended/inactive staff exist among the real 3 before
+   cutover (already known: 0), so the "suspended staff" reconciliation
+   check has a real assertion to make on the day, not just an equality
+   that happens to hold vacuously.
+2. Budget the maintenance window around process/verification time, not
+   migration execution time — the script itself is sub-3-second at this
+   data volume.
+
+## PRODUCTION DATA MIGRATION REHEARSAL: GO
+
+For preparing the production cutover — **not for executing it.** All
+requested checks passed, using real (anonymized) data through the actual
+migration mechanism, including both failure/rollback paths. No cutover
+has been performed. Awaiting explicit approval before any further step.
