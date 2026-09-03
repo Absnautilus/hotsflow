@@ -4,3 +4,9 @@ dist/
 .env.local
 supabase/.temp/
 supabase/.branches/
+
+# Real (even if anonymized) rehearsal/production migration seed data must
+# never be committed -- see docs/production-migration-rehearsal.md §9/§10.
+# Written only at runtime on a disposable CI runner, from a workflow_dispatch
+# input, never from a file that lives in this repo.
+scripts/dry-run/01_seed_legacy_rehearsal.sql

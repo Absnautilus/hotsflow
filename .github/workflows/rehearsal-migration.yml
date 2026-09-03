@@ -1,0 +1,44 @@
+name: Production migration rehearsal (real anonymized data, disposable target)
+
+# Manual only. Never touches the legacy Housekeeping project or the real
+# Hotsflow project -- spins up a throwaway local Supabase stack inside the
+# runner (same mechanism ci.yml and dry-run-migration.yml already use).
+#
+# The real-but-anonymized seed data (docs/production-migration-rehearsal.md)
+# is passed as a workflow_dispatch input, base64-encoded, and written to a
+# file that exists ONLY on the runner's disk for this one run -- it is
+# never committed to this repository. The input is consumed via `env:`
+# rather than interpolated directly into a run script, so its value is not
+# echoed into the step log the way a direct ${{ }} substitution in a `run:`
+# body would be. The file, the runner, and everything created on it are
+# destroyed when the job ends.
+on:
+  workflow_dispatch:
+    inputs:
+      seed_sql_base64:
+        description: "Base64-encoded contents of the real (anonymized) rehearsal seed SQL — never committed, written only to the disposable runner's disk for this run."
+        required: true
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start local Supabase stack
+        run: supabase start
+      - name: Apply migrations + seed.sql
+        run: supabase db reset
+      - name: Write the real (anonymized) rehearsal seed — not committed
+        env:
+          SEED_SQL_B64: ${{ inputs.seed_sql_base64 }}
+        run: echo "$SEED_SQL_B64" | base64 -d > scripts/dry-run/01_seed_legacy_rehearsal.sql
+      - name: Run rehearsal
+        run: |
+          chmod +x scripts/dry-run/orchestrate_rehearsal.sh
+          scripts/dry-run/orchestrate_rehearsal.sh
+      - name: Remove the seed file from the runner (belt-and-suspenders — the runner is destroyed anyway)
+        if: always()
+        run: rm -f scripts/dry-run/01_seed_legacy_rehearsal.sql
