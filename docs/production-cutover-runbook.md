@@ -71,46 +71,79 @@ preparation.
 
 ---
 
-## 3. Freeze / maintenance strategy (proposed, not implemented)
+## 3. Freeze / maintenance strategy — VERIFIED (cutover-readiness item E, 2026-09-03)
 
 Legacy has exactly one hotel (confirmed: `hotels` count = 1) — no other
 tenant is affected by freezing it.
 
-**Proposed mechanism — least invasive, no new code, no new distributed
-system:**
+**Mechanism — exact ACL snapshot/revoke/restore, not a hardcoded grant
+set.** The original proposal below (kept for reference) risked exactly
+the caveat it named: a blanket REVOKE/GRANT assumes a fixed privilege set
+that may not match each table's actual current grants (e.g. column-level
+grants, or a table with no direct client grant at all). That risk is now
+closed: `scripts/freeze/01_snapshot.sql`/`02_revoke.sql`/`03_restore.sql`
+capture the exact table- and column-level ACL via `aclexplode()` on
+`pg_class.relacl`/`pg_attribute.attacl` into a **permanent** table
+(`_freeze_acl_snapshot` — deliberately not temporary, so recovery works
+from a separate session after an interruption), REVOKE/GRANT exactly
+those captured tuples, and verify restoration with a bidirectional
+`EXCEPT` diff (0 missing, 0 overshoot) rather than assuming equivalence.
+
+Rehearsed end-to-end on the disposable local stack
+(`.github/workflows/freeze-rehearsal.yml`, run
+[33780701562](https://github.com/Absnautilus/hotsflow/actions/runs/33780701562),
+commit `5b89580`) — **8/8 PASS**: pre-freeze write sanity, snapshot (53
+ACL rows), REVOKE blocks writes (403) while reads keep working (200),
+RESTORE reproduces the exact pre-freeze ACL (0 missing/0 overshoot) and
+functional writes resume (201), and a distinct failure-scenario test
+(REVOKE, simulated crash before RESTORE, recovery run as a **separate**
+independent `psql` invocation) confirms recovery depends only on the
+persisted snapshot table, not any in-memory session state. First run
+caught and required fixing a synthetic-fixture bug (missing `priority`
+value in the test seed — see commit `5b89580`); it was a test-data gap,
+not a defect in the frozen migration script, and did not affect the
+already-approved real-data rehearsal.
 
 ```sql
 -- FREEZE (run on legacy immediately before FINAL EXPORT):
+psql "$LEGACY_DB_URL" -f scripts/freeze/01_snapshot.sql
+psql "$LEGACY_DB_URL" -f scripts/freeze/02_revoke.sql
+
+-- REOPEN (run after DECISION, whichever way it goes, or to recover from
+-- an interruption -- this step alone is the full recovery procedure):
+psql "$LEGACY_DB_URL" -f scripts/freeze/03_restore.sql
+```
+
+This makes every write attempt fail at the database level — instant,
+symmetric, trivially reversible, no application code touched, no
+maintenance-mode banner to build. Reads keep working, so guests/staff see
+a real (if temporarily static) app rather than a hard error page.
+
+Recommended window: 15–20 minutes (see §11.7 for the breakdown) —
+generous relative to the rehearsal's sub-second script execution, to
+cover real network latency, manual verification reads, and the
+deliberate STOP checkpoint in §5.
+
+<details>
+<summary>Original proposal (superseded by the verified mechanism above, kept for context)</summary>
+
+```sql
 revoke insert, update, delete on
   guest_requests, stays, staff_profiles, rooms, request_categories,
   request_types, pms_integrations
 from authenticated, anon;
 
--- REOPEN (run after DECISION, whichever way it goes):
 grant insert, update, delete on
   guest_requests, stays, staff_profiles, rooms, request_categories,
   request_types, pms_integrations
-to authenticated, anon;  -- (or the narrower grants each table actually had — see note)
+to authenticated, anon;
 ```
 
-This makes every write attempt fail at the database level — instant,
-symmetric, trivially reversible (a single matching GRANT), no application
-code touched, no maintenance-mode banner to build. Reads keep working, so
-guests/staff see a real (if temporarily static) app rather than a hard
-error page.
+The caveat that motivated replacing this (a blanket grant set can't be
+assumed to mirror each table's actual current grants) is exactly what the
+verified mechanism above closes.
 
-**Caveat, stated plainly, not glossed over:** the exact REVOKE must
-mirror each table's actual current grants (some are already
-role-restricted, e.g. `pms_integrations` has no direct client grant at
-all — see the main plan §A). The precise REOKE/GRANT pair needs to be
-generated from each table's real `information_schema.role_table_grants`
-immediately before use, not copy-pasted blind — this is a preparation
-task for step 4, not something to write once now and trust unchanged.
-
-**Not implemented yet, per instruction.** Recommended window: 15–20
-minutes (see §11.7 for the breakdown) — generous relative to the
-rehearsal's sub-3-second script execution, to cover real network latency,
-manual verification reads, and the deliberate STOP checkpoint in §5.
+</details>
 
 ---
 
@@ -307,7 +340,7 @@ that same treatment.
 
 | Credential | Where it's used | Who configures it |
 |---|---|---|
-| Hotsflow project's `secret`/`service_role` API key | Auth-creation phase (GoTrue admin API) for the real migration | **New** — does not currently exist as a GitHub secret in this repo (confirmed: `deploy-migrations.yml` only uses the raw DB password for SQL-level access, never the API key). You add it directly as a repository secret in GitHub Settings, never through me. |
+| Hotsflow project's `secret`/`service_role` API key | Auth-creation phase (GoTrue admin API) for the real migration | **New** — does not currently exist as a GitHub secret in this repo (confirmed: `deploy-migrations.yml` only uses the raw DB password for SQL-level access, never the API key). Proposed name: `SUPABASE_SECRET_KEY` (repository secret, `Absnautilus/hotsflow`, Settings → Secrets and variables → Actions → New repository secret). You add it directly there, never through me — never paste the value in chat, never pass it as a `workflow_dispatch` input. |
 | Hotsflow DB connection (`SUPABASE_DB_HOST`/`_USER`/`_PASSWORD`) | SQL migration + reconciliation | Already exists (`deploy-migrations.yml` already uses these) — reuse, don't recreate. |
 | New VAPID private key | Supabase Edge Function secret on Hotsflow | You run `supabase secrets set VAPID_PRIVATE_KEY=... VAPID_PUBLIC_KEY=... VAPID_SUBJECT=...` yourself, directly against Hotsflow, using the CLI or Studio — never pasted here. |
 | New VAPID public key | Vercel `VITE_VAPID_PUBLIC_KEY` | You set this directly in Vercel — it's not secret (client-exposed by design) but still a manual, direct action. |
@@ -367,8 +400,9 @@ expected value.
 2. **Pre-flight checklist**: §2 — 14 of 17 items resolved as of this
    document; 3 (webhook deploy, VAPID application, Auth domain
    configuration) explicitly still open.
-3. **Freeze strategy**: §3 — proposed REVOKE/GRANT mechanism, not yet
-   implemented.
+3. **Freeze strategy**: §3 — exact ACL snapshot/revoke/restore mechanism,
+   **rehearsed and verified** on the disposable stack (8/8 PASS,
+   2026-09-03), including a failure-scenario recovery test.
 4. **Rollback decision tree**: §7 — cases A–E, with E fully elaborated
    per instruction.
 5. **Acceptance criteria**: §10.
@@ -398,10 +432,17 @@ expected value.
      blockers, not administrative formalities — login itself breaks
      without §2.15 resolved, regardless of how clean the data migration
      is.
-   - **MEDIUM**: the freeze mechanism (§3) is proposed but unexercised —
-     first real use will be during the actual cutover, not rehearsed.
-   - **MEDIUM**: department-isolation's negative case remains untested
-     (carried over from the rehearsal, unchanged by this document).
+   - **RESOLVED** (was MEDIUM): the freeze mechanism (§3) has now been
+     rehearsed end-to-end on the disposable stack, including a
+     failure-scenario recovery test — no longer unexercised, though the
+     real Hotsflow/legacy tables will still be its first use against a
+     real project.
+   - **RESOLVED** (was MEDIUM): department-isolation's negative case is
+     covered at the SQL/pgTAP level
+     (`supabase/tests/026_guest_requests_cross_tenant_department.test.sql`)
+     — confirmed by direct reading, not assumed; no new E2E test was
+     added since it would require production data with no clean
+     disposable-only way to exercise it (cutover-readiness item F).
    - **LOW**: `pms_integrations` migration path remains logically sound
      but never exercised against a non-empty row.
 
