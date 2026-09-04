@@ -1,0 +1,43 @@
+name: Verify legacy operational status pre-cutover (non-destructive, no PII)
+
+# Manual only. Pre-cutover check: does the real legacy Housekeeping
+# project currently show app-facing write access (operational/unfrozen),
+# or does it show the exact signature this repo's own freeze mechanism
+# (scripts/freeze/01_snapshot.sql / 02_revoke.sql / 03_restore.sql)
+# defines as a successful freeze? Uses ONLY the LEGACY_DB_URL_READONLY
+# secret -- no Hotsflow secret or variable is referenced anywhere in
+# this file, so there is no path by which this workflow could touch the
+# target project. Catalog/metadata introspection only (aclexplode on
+# pg_class.relacl / pg_attribute.attacl, pg_tables existence checks) --
+# no application data is read, no write is attempted, no snapshot or
+# restore table is created, modified, or read.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_legacy_project_ref:
+        description: "Type the legacy Housekeeping project ref to confirm: bqurkxmkqviewzbndldh"
+        required: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation matches the expected legacy project ref
+        run: |
+          if [ "${{ inputs.confirm_legacy_project_ref }}" != "bqurkxmkqviewzbndldh" ]; then
+            echo "::error::confirm_legacy_project_ref does not match -- refusing to proceed."
+            exit 1
+          fi
+          echo "Confirmed: targeting legacy Housekeeping project bqurkxmkqviewzbndldh."
+
+      - uses: actions/checkout@v4
+
+      - name: Non-destructive operational status check (metadata/ACL introspection only)
+        env:
+          LEGACY_RO_DB_URL: ${{ secrets.LEGACY_DB_URL_READONLY }}
+        run: |
+          if [ -z "$LEGACY_RO_DB_URL" ]; then
+            echo "::error::LEGACY_DB_URL_READONLY secret is not set."
+            exit 1
+          fi
+          psql "$LEGACY_RO_DB_URL" -v ON_ERROR_STOP=1 -f scripts/production/verify_legacy_operational_status.sql
