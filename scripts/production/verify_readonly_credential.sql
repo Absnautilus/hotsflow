@@ -234,7 +234,75 @@ select coalesce(
   \quit 1
 \endif
 
-\echo '=== 11. the view is not security_invoker=true (it must run as its owner, not as migration_readonly, to read auth.users) ==='
+\echo '=== 11. no grantee other than migration_readonly or the view owner holds SELECT on the view ==='
+\echo '--- (owner is expected -- CREATE VIEW grants the owner full rights by default; anyone else here would be a leak) ---'
+select
+  pg_get_userbyid(a.grantee) as grantee,
+  a.privilege_type
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as a
+where n.nspname = 'public' and c.relname = 'migration_readonly_auth_lookup'
+  and a.privilege_type = 'SELECT'
+  and a.grantee <> 0
+  and a.grantee not in (
+    coalesce((select oid from pg_roles where rolname = 'migration_readonly'), -1),
+    c.relowner
+  )
+order by grantee;
+select coalesce(
+  not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as a
+    where n.nspname = 'public' and c.relname = 'migration_readonly_auth_lookup'
+      and a.privilege_type = 'SELECT'
+      and a.grantee <> 0
+      and a.grantee not in (
+        coalesce((select oid from pg_roles where rolname = 'migration_readonly'), -1),
+        c.relowner
+      )
+  ),
+  false
+) as ok_no_extra_select_grantees \gset
+\if :ok_no_extra_select_grantees
+  \echo 'PASS: no grantee other than migration_readonly/owner holds SELECT on the view'
+\else
+  \echo 'FAIL: an unexpected role holds SELECT on the view -- aborting gate'
+  \quit 1
+\endif
+
+\echo '=== 12. migration_readonly does not hold SELECT WITH GRANT OPTION on the view ==='
+select
+  a.is_grantable as migration_readonly_select_grantable
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as a
+where n.nspname = 'public' and c.relname = 'migration_readonly_auth_lookup'
+  and a.privilege_type = 'SELECT'
+  and a.grantee = (select oid from pg_roles where rolname = 'migration_readonly');
+select coalesce(
+  not exists (
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) as a
+    where n.nspname = 'public' and c.relname = 'migration_readonly_auth_lookup'
+      and a.privilege_type = 'SELECT'
+      and a.grantee = (select oid from pg_roles where rolname = 'migration_readonly')
+      and a.is_grantable = true
+  ),
+  false
+) as ok_no_grant_option \gset
+\if :ok_no_grant_option
+  \echo 'PASS: migration_readonly does not have WITH GRANT OPTION on the view'
+\else
+  \echo 'FAIL: migration_readonly holds WITH GRANT OPTION on the view -- aborting gate'
+  \quit 1
+\endif
+
+\echo '=== 13. the view is not security_invoker=true (it must run as its owner, not as migration_readonly, to read auth.users) ==='
 select coalesce(c.reloptions::text, '') as reloptions
 from pg_class c
 join pg_namespace n on n.oid = c.relnamespace
@@ -253,7 +321,7 @@ select coalesce(
   \quit 1
 \endif
 
-\echo '=== 12. no superuser/admin-level role attribute ==='
+\echo '=== 14. no superuser/admin-level role attribute ==='
 select rolsuper, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname = current_user;
 select coalesce(
   not (
@@ -271,7 +339,7 @@ select coalesce(
   \quit 1
 \endif
 
-\echo '=== 13. end-to-end proof: every real-hotel staff member resolves to a lookup row with a non-null email (counts only, no email/name ever printed) ==='
+\echo '=== 15. end-to-end proof: every real-hotel staff member resolves to a lookup row with a non-null email (counts only, no email/name ever printed) ==='
 select
   (select count(*) from staff_profiles where hotel_id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb') as staff_total,
   (select count(*) from staff_profiles sp where sp.hotel_id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb'
