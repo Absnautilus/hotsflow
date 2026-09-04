@@ -311,10 +311,11 @@ jobs:
 
           # No-PII-in-diagnostic check: re-derive the exact colliding email
           # and the exact deterministic password 05_auth_migrate.sh would
-          # have generated for that legacy id -- never via a ${{ }}
-          # expression, so neither value is ever resolved into this step's
-          # echoed command text -- and confirm neither, nor the service
-          # role key, leaked into the log via the new diagnostic.
+          # have generated for that legacy id -- never via a GitHub
+          # expression interpolation, so neither value is ever resolved
+          # into this step's echoed command text -- and confirm neither,
+          # nor the service role key, leaked into the log via the new
+          # diagnostic.
           COLLIDE_EMAIL="$(PGPASSWORD=legacysimadminpw psql "postgresql://postgres@localhost:5433/postgres" -tAc \
             "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a2'")"
           COLLIDE_PASSWORD="Migrated$(echo 'cccccccc-0000-0000-0000-0000000000a2' | tr -dc '0-9' | cut -c1-8)!Aa"
