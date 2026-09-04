@@ -75,16 +75,25 @@ select coalesce((select count(*) from hotels where id = '25b00bec-1602-46e9-bf52
   $$;
 \endif
 
-\echo '=== 3. session-level read-only enforcement must be "on" ==='
-select current_setting('transaction_read_only') as transaction_read_only;
-select coalesce(current_setting('transaction_read_only') = 'on', false) as ok_readonly \gset
+\echo '=== 3. session/default read-only enforcement must both be "on" ==='
+
+select
+  current_setting('transaction_read_only') as transaction_read_only,
+  current_setting('default_transaction_read_only') as default_transaction_read_only;
+
+select coalesce(
+  current_setting('transaction_read_only') = 'on'
+  and current_setting('default_transaction_read_only') = 'on',
+  false
+) as ok_readonly \gset
+
 \if :ok_readonly
-  \echo 'PASS: transaction_read_only = on'
+  \echo 'PASS: transaction_read_only = on AND default_transaction_read_only = on'
 \else
-  \echo 'FAIL: transaction_read_only is NOT on -- aborting gate'
+  \echo 'FAIL: transaction/default read-only enforcement is not fully on -- aborting gate'
   DO $$
   BEGIN
-    RAISE EXCEPTION 'Gate failed: transaction_read_only is NOT on -- aborting gate';
+    RAISE EXCEPTION 'Gate failed: transaction/default read-only enforcement is not fully on -- aborting gate';
   END
   $$;
 \endif
