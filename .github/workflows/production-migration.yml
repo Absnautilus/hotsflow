@@ -1,0 +1,65 @@
+name: PRODUCTION MIGRATION — Palazzo Veneziano (real legacy -> real Hotsflow)
+
+# NOT YET AUTHORIZED TO RUN. Created for review only -- see
+# docs/production-cutover-runbook.md and the design discussion that
+# produced this file. Requires a NEW repository secret,
+# LEGACY_DB_URL_READONLY, pointing at a dedicated read-only role on the
+# real legacy project (scripts/production/setup_readonly_role.sql) --
+# that role has not been created on the real legacy project either, per
+# explicit instruction. Do not run this workflow until both the role and
+# this secret exist AND you have given explicit authorization to execute
+# against production.
+#
+# Double gate: confirm_project_ref (must match Hotsflow's project ref)
+# AND a literal typed confirmation phrase -- a single mistyped input is
+# not enough to trigger a real migration. `concurrency` prevents two
+# migration runs overlapping; the orchestrator itself has an independent
+# hard gate that refuses to run if the hotel already exists on the
+# target, so an accidental rerun after a completed migration is refused
+# before touching anything.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_project_ref:
+        description: "Type the target Supabase project ref to confirm (must match the SUPABASE_PROJECT_REF repo variable exactly)"
+        required: true
+      confirm_phrase:
+        description: 'Type exactly: MIGRATE-PALAZZO-VENEZIANO'
+        required: true
+
+concurrency:
+  group: production-migration-palazzo-veneziano
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation phrase and target project ref
+        run: |
+          if [ "${{ inputs.confirm_phrase }}" != "MIGRATE-PALAZZO-VENEZIANO" ]; then
+            echo "::error::confirm_phrase does not match -- refusing to proceed."
+            exit 1
+          fi
+          if [ "${{ inputs.confirm_project_ref }}" != "${{ vars.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::confirm_project_ref does not match the configured SUPABASE_PROJECT_REF repo variable -- refusing to proceed."
+            exit 1
+          fi
+          echo "Confirmed: target project ref ${{ vars.SUPABASE_PROJECT_REF }}, phrase matched."
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run production migration
+        env:
+          LEGACY_RO_DB_URL: ${{ secrets.LEGACY_DB_URL_READONLY }}
+          TARGET_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+          TARGET_API_URL: https://${{ vars.SUPABASE_PROJECT_REF }}.supabase.co
+          TARGET_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          LEGACY_HOTEL_ID: 25b00bec-1602-46e9-bf52-a4913ebb5bdb
+          HOTEL_NAME: Palazzo Veneziano
+          HOTEL_SLUG: palazzo-veneziano
+        run: |
+          chmod +x scripts/production/orchestrate_production_migration.sh scripts/production/05_auth_migrate.sh
+          scripts/production/orchestrate_production_migration.sh

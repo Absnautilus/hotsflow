@@ -1,0 +1,235 @@
+name: Production migration mechanism — E2E test (disposable only, no real systems)
+
+# Manual only, NO confirm_project_ref gate needed and self-triggerable --
+# every credential and every database here is disposable, created fresh
+# by this workflow and destroyed with the runner at job end. Never
+# touches the real legacy or Hotsflow projects, never touches Vercel,
+# never creates real secrets.
+#
+# "legacy-sim" is a plain Postgres service container seeded with a
+# schema-shape double of legacy's public tables (see
+# scripts/production/e2e-test/seed_legacy_sim.sql) -- deliberately not a
+# full Supabase stack on that side, since triggers/RLS/functions are out
+# of scope for testing the migration MECHANISM (already covered
+# elsewhere). "target-sim" is a full local Supabase stack (same
+# mechanism dry-run-migration.yml/rehearsal-migration.yml/
+# freeze-rehearsal.yml already use), needed because Auth migration must
+# exercise the real GoTrue Admin API.
+#
+# All seeded data is canary-tagged (contains a random per-run string).
+# After each job finishes, the orchestrating session fetches the full
+# job log via the GitHub API and greps it for that string -- concrete
+# evidence of no leak, not an assumption.
+on:
+  workflow_dispatch:
+
+jobs:
+  happy-path:
+    runs-on: ubuntu-latest
+    services:
+      legacy-sim:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: legacysimadminpw
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate canary string
+        id: canary
+        run: echo "value=zzc$(date +%s)$RANDOM" >> "$GITHUB_OUTPUT"
+
+      - name: Seed legacy-sim (canary-tagged synthetic data)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -v canary="${{ steps.canary.outputs.value }}" \
+            -f scripts/production/e2e-test/seed_legacy_sim.sql
+
+      - name: Create migration_readonly role on legacy-sim
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -v role_password="e2e-test-readonly-pw" \
+            -f scripts/production/setup_readonly_role.sql
+
+      - name: Active read-only enforcement test (must be REJECTED)
+        run: |
+          set +e
+          PGPASSWORD=e2e-test-readonly-pw psql "postgresql://migration_readonly@localhost:5433/postgres" \
+            -c "insert into hotels values ('deadbeef-0000-0000-0000-000000000001','should not be allowed','Europe/Rome',true);"
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo "!!! FAIL: read-only role was able to write. Aborting."
+            exit 1
+          fi
+          echo ">>> read_only_enforcement: PASS (write correctly rejected, exit code $RC)"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start target-sim (local Supabase stack)
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Run production migration orchestrator against legacy-sim -> target-sim
+        env:
+          LEGACY_RO_DB_URL: postgresql://migration_readonly:e2e-test-readonly-pw@localhost:5433/postgres
+          LEGACY_HOTEL_ID: cccccccc-0000-0000-0000-000000000001
+          HOTEL_NAME: "ZZCANARY_HOTEL_${{ steps.canary.outputs.value }}"
+          HOTEL_SLUG: "zzcanary-e2e-test"
+        run: |
+          STATUS_JSON="$(supabase status -o json)"
+          TARGET_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          TARGET_API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
+          TARGET_SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          export TARGET_DB_URL TARGET_API_URL TARGET_SERVICE_ROLE_KEY
+          chmod +x scripts/production/orchestrate_production_migration.sh scripts/production/05_auth_migrate.sh
+          scripts/production/orchestrate_production_migration.sh
+
+      - name: Verify workspace was removed
+        run: |
+          if [ -d "${RUNNER_TEMP}/migration-workspace" ]; then
+            echo "!!! FAIL: workspace still exists after orchestrator run"
+            exit 1
+          fi
+          echo ">>> workspace_cleanup: PASS"
+
+      - name: Idempotency / hard-gate test — rerun MUST be blocked
+        env:
+          LEGACY_RO_DB_URL: postgresql://migration_readonly:e2e-test-readonly-pw@localhost:5433/postgres
+          LEGACY_HOTEL_ID: cccccccc-0000-0000-0000-000000000001
+          HOTEL_NAME: "ZZCANARY_HOTEL_${{ steps.canary.outputs.value }}"
+          HOTEL_SLUG: "zzcanary-e2e-test"
+        run: |
+          STATUS_JSON="$(supabase status -o json)"
+          TARGET_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          TARGET_API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
+          TARGET_SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          export TARGET_DB_URL TARGET_API_URL TARGET_SERVICE_ROLE_KEY
+          set +e
+          scripts/production/orchestrate_production_migration.sh
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo "!!! FAIL: rerun against an already-migrated hotel was NOT blocked"
+            exit 1
+          fi
+          echo ">>> hard_gate_rerun: PASS (rerun correctly refused, exit code $RC)"
+
+  auth-failure-injection:
+    runs-on: ubuntu-latest
+    services:
+      legacy-sim:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: legacysimadminpw
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate canary string
+        id: canary
+        run: echo "value=zzcfail$(date +%s)$RANDOM" >> "$GITHUB_OUTPUT"
+
+      - name: Seed legacy-sim (canary-tagged synthetic data)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -v canary="${{ steps.canary.outputs.value }}" \
+            -f scripts/production/e2e-test/seed_legacy_sim.sql
+
+      - name: Create migration_readonly role on legacy-sim
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -v role_password="e2e-test-readonly-pw" \
+            -f scripts/production/setup_readonly_role.sql
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start target-sim (local Supabase stack)
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Pre-create a colliding Auth user on target-sim (forces the 2nd creation to fail)
+        run: |
+          STATUS_JSON="$(supabase status -o json)"
+          API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
+          SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          curl -s -X POST "$API_URL/auth/v1/admin/users" \
+            -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -H "User-Agent: migration-script/1.0" \
+            -d "{\"email\":\"zzcanary-op1-${{ steps.canary.outputs.value }}@example.test\",\"password\":\"Collision!234\",\"email_confirm\":true}" >/dev/null
+
+      - name: Run orchestrator — MUST fail at Auth migration and roll back
+        env:
+          LEGACY_RO_DB_URL: postgresql://migration_readonly:e2e-test-readonly-pw@localhost:5433/postgres
+          LEGACY_HOTEL_ID: cccccccc-0000-0000-0000-000000000001
+          HOTEL_NAME: "ZZCANARY_HOTEL_${{ steps.canary.outputs.value }}"
+          HOTEL_SLUG: "zzcanary-e2e-fail-test"
+        run: |
+          STATUS_JSON="$(supabase status -o json)"
+          TARGET_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          TARGET_API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
+          TARGET_SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          export TARGET_DB_URL TARGET_API_URL TARGET_SERVICE_ROLE_KEY
+          chmod +x scripts/production/orchestrate_production_migration.sh scripts/production/05_auth_migrate.sh
+          set +e
+          scripts/production/orchestrate_production_migration.sh
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo "!!! FAIL: orchestrator succeeded despite the forced Auth collision"
+            exit 1
+          fi
+          echo ">>> auth_failure_triggered: PASS (orchestrator correctly exited nonzero: $RC)"
+
+      - name: Verify rollback — no hotel, no auth_remap rows, orphaned Auth user deleted
+        run: |
+          STATUS_JSON="$(supabase status -o json)"
+          API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
+          SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          HOTEL_COUNT="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from hotels where id = 'cccccccc-0000-0000-0000-000000000001'")"
+          REMAP_COUNT="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from auth_remap" 2>/dev/null || echo 0)"
+          MASTER_STILL_EXISTS="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from auth.users where email = 'zzcanary-master-${{ steps.canary.outputs.value }}@example.test'")"
+          echo "hotel_count=$HOTEL_COUNT auth_remap_count=$REMAP_COUNT master_auth_user_remaining=$MASTER_STILL_EXISTS"
+          if [ "$HOTEL_COUNT" != "0" ] || [ "$REMAP_COUNT" != "0" ] || [ "$MASTER_STILL_EXISTS" != "0" ]; then
+            echo "!!! FAIL: rollback left residue (hotel/auth_remap/orphaned Auth user)"
+            exit 1
+          fi
+          echo ">>> auth_failure_rollback: PASS (0 hotel rows, 0 auth_remap rows, orphaned Auth user cleaned up)"
+
+      - name: Verify workspace was removed
+        run: |
+          if [ -d "${RUNNER_TEMP}/migration-workspace" ]; then
+            echo "!!! FAIL: workspace still exists after a failed run"
+            exit 1
+          fi
+          echo ">>> workspace_cleanup_on_failure: PASS"
