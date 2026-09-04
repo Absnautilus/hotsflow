@@ -1,29 +1,20 @@
 #!/usr/bin/env bash
 # Production migration -- AUTH MIGRATION. Reads (legacy_id,email) pairs
-# from a LOCAL FILE (never stdin/stdout, never echoed), creates one
-# Hotsflow Auth user per pair via the Admin API (reusing lib.sh's
-# create_auth_user/delete_auth_user unchanged -- no second
-# implementation), and populates the permanent `auth_remap` table
-# 10_migrate_hotel.sql depends on. On the FIRST failed creation, deletes
-# every user already created in this run and exits nonzero -- the caller
-# (orchestrate_production_migration.sh) must not proceed to SQL MIGRATION
-# if this script exits nonzero.
+# from a LOCAL FILE (never stdin/stdout, never echoed), creates or safely
+# reuses one Hotsflow Auth user per pair, and populates the permanent
+# `auth_remap` table 10_migrate_hotel.sql depends on.
 #
-# Passwords are never carried over from legacy (never read, never
-# available to this script at all) -- a fresh, deterministic value is
-# generated from the legacy id, same approach already validated in the
-# rehearsal. Staff must reset it after migration; this script's job is
-# only to create a working account, not to preserve a real credential.
+# Existing target Auth identities are reused only when the staged email has
+# exactly one case-insensitive match in auth.users. Existing users are never
+# modified or deleted. Zero matches means create a new Auth user; more than
+# one match is treated as an ambiguity and fails closed.
 #
-# On a failed creation, prints a sanitized diagnostic alongside the
-# legacy_id -- HTTP status plus the Admin API's .code/.error_code/.msg/
-# .message fields only (lib.sh's create_auth_user/sanitize_auth_error;
-# real run 33884207538 hit this exact FAILED path with only "creation
-# failed" and no usable reason, since the prior version of create_auth_user
-# discarded the response body entirely on non-200). Never the full
-# response body, never email/password/service-role key -- see lib.sh for
-# the exact field allowlist and the defense-in-depth email-pattern
-# scrub applied to each field before it is ever printed.
+# Passwords are never carried over from legacy (never read, never available
+# to this script). A fresh deterministic value is generated only for genuinely
+# new Auth users. Staff must reset it after migration.
+#
+# On a failed creation, prints only the sanitized diagnostic implemented in
+# lib.sh. Never prints email/password/service-role key or a raw API body.
 #
 # Usage: DB_URL=... API_URL=... SERVICE_ROLE_KEY=... \
 #   05_auth_migrate.sh <staff_csv_path>
@@ -50,29 +41,56 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
 
 CREATED_IDS=()
 MAPPED=0
+REUSED=0
 FAILED=0
 
-# File, not a variable: create_auth_user runs inside command substitution
-# ("$(create_auth_user ...)"), which is a subshell -- a variable it set
-# would never be visible here. See lib.sh for the full explanation.
+# File, not a variable: create_auth_user is invoked through command
+# substitution, therefore it runs in a subshell. The file carries the
+# sanitized diagnostic back across that subshell boundary.
 AUTH_CREATE_ERROR_FILE="$(mktemp)"
 export AUTH_CREATE_ERROR_FILE
 
 cleanup_on_failure() {
   rm -f "$AUTH_CREATE_ERROR_FILE"
-  if [ "$FAILED" = "1" ] && [ "${#CREATED_IDS[@]}" -gt 0 ]; then
-    echo "=== Auth migration failed -- rolling back ${#CREATED_IDS[@]} already-created user(s) ==="
-    for id in "${CREATED_IDS[@]}"; do
-      delete_auth_user "$id"
-    done
+  if [ "$FAILED" = "1" ]; then
+    if [ "${#CREATED_IDS[@]}" -gt 0 ]; then
+      echo "=== Auth migration failed -- rolling back ${#CREATED_IDS[@]} newly-created user(s) ==="
+      for id in "${CREATED_IDS[@]}"; do
+        delete_auth_user "$id"
+      done
+    fi
+    # Clear mappings even when every mapped identity was reused and no new
+    # Auth user had yet been created. A failed Auth phase must leave no
+    # auth_remap residue from the attempted run.
     psql "$DB_URL" -v ON_ERROR_STOP=1 -c "truncate auth_remap;" >/dev/null
-    echo "=== Rollback complete: 0 Auth users, 0 auth_remap rows remain from this run ==="
+    echo "=== Auth rollback complete: auth_remap cleared; pre-existing Auth users untouched ==="
   fi
 }
 trap cleanup_on_failure EXIT
 
 while IFS=, read -r legacy_id email; do
   [ -z "$legacy_id" ] && continue
+
+  existing_count="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tAc \
+    "select count(*) from auth.users where lower(email) = lower(:'email');")"
+
+  if [ "$existing_count" = "1" ]; then
+    existing_id="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tAc \
+      "select id from auth.users where lower(email) = lower(:'email') limit 1;")"
+    psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+      "insert into auth_remap (legacy_auth_user_id, new_auth_user_id) values ('$legacy_id','$existing_id') on conflict (legacy_auth_user_id) do update set new_auth_user_id = excluded.new_auth_user_id;" >/dev/null
+    MAPPED=$((MAPPED + 1))
+    REUSED=$((REUSED + 1))
+    echo ">>> auth_identity_reuse: PASS (exact existing target Auth identity reused; PII withheld)"
+    continue
+  fi
+
+  if [ "$existing_count" != "0" ]; then
+    echo "!!! Auth identity lookup ambiguous for legacy_id=$legacy_id (email withheld from log; exact-email matches=$existing_count)"
+    FAILED=1
+    break
+  fi
+
   pw="$(pw_for_id "$legacy_id")"
   : > "$AUTH_CREATE_ERROR_FILE"
   new_id="$(create_auth_user "$email" "$pw")"
@@ -82,14 +100,16 @@ while IFS=, read -r legacy_id email; do
     FAILED=1
     break
   fi
+
   CREATED_IDS+=("$new_id")
-  psql "$DB_URL" -v ON_ERROR_STOP=1 -c "insert into auth_remap (legacy_auth_user_id, new_auth_user_id) values ('$legacy_id','$new_id') on conflict (legacy_auth_user_id) do nothing;" >/dev/null
+  psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+    "insert into auth_remap (legacy_auth_user_id, new_auth_user_id) values ('$legacy_id','$new_id') on conflict (legacy_auth_user_id) do update set new_auth_user_id = excluded.new_auth_user_id;" >/dev/null
   MAPPED=$((MAPPED + 1))
 done < "$STAFF_CSV"
 
 if [ "$FAILED" = "1" ]; then
-  echo ">>> auth_migration: FAIL (0 staff mapped after rollback)"
+  echo ">>> auth_migration: FAIL"
   exit 1
 fi
 
-echo ">>> auth_migration: PASS ($MAPPED staff mapped)"
+echo ">>> auth_migration: PASS ($MAPPED staff mapped; $REUSED existing Auth identities reused)"
