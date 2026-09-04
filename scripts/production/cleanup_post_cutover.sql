@@ -6,12 +6,20 @@
 -- observation window (see the runbook, section 8) has passed, with the
 -- same admin credential used for every other script in this directory.
 --
+-- Deliberately touches only objects we own and control (public schema
+-- tables/policies/view, and the role itself) -- nothing here depends on
+-- any privilege over the auth schema, which is owned by supabase_admin
+-- on the real legacy project. The final design grants migration_readonly
+-- no privilege on auth at all, so there is nothing to revoke there; an
+-- early version of this script did include a schema-auth REVOKE pair
+-- "just in case" a historical grant remained, but under ON_ERROR_STOP
+-- that made this cleanup's success depend on a schema this project does
+-- not own -- removed rather than risk that.
+--
 -- Order matters: DROP ROLE fails ("role cannot be dropped because some
 -- objects depend on it") while any GRANT, POLICY, or view privilege
 -- still references the role -- so every dependency is removed first,
--- role last. REVOKE on a privilege that no longer exists (or never took
--- effect, like the historical schema-auth grant) is a safe no-op, not an
--- error.
+-- role last.
 \set ON_ERROR_STOP on
 
 -- 1. Revoke the base table grants (setup_readonly_role.sql)
@@ -19,13 +27,7 @@ revoke all privileges on
   hotels, staff_profiles, rooms, stays, request_categories, request_types, guest_requests
 from migration_readonly;
 
--- 2. Revoke the historical auth-schema grants, in case they are still
---    present from before this redesign (safe no-op if already absent or
---    never effective)
-revoke select (id, email) on auth.users from migration_readonly;
-revoke usage on schema auth from migration_readonly;
-
--- 3. Drop the 7 additive RLS policies (fix_readonly_access.sql)
+-- 2. Drop the 7 additive RLS policies (fix_readonly_access.sql)
 drop policy if exists migration_readonly_select_hotels on hotels;
 drop policy if exists migration_readonly_select_staff_profiles on staff_profiles;
 drop policy if exists migration_readonly_select_rooms on rooms;
@@ -34,12 +36,12 @@ drop policy if exists migration_readonly_select_request_categories on request_ca
 drop policy if exists migration_readonly_select_request_types on request_types;
 drop policy if exists migration_readonly_select_guest_requests on guest_requests;
 
--- 4. Drop the temporary auth lookup view (create_migration_auth_lookup.sql)
+-- 3. Drop the temporary auth lookup view (create_migration_auth_lookup.sql)
 --    -- this also removes the GRANT SELECT on it, the last remaining
 --    dependency.
 drop view if exists public.migration_readonly_auth_lookup;
 
--- 5. Remove the role itself -- must come last.
+-- 4. Remove the role itself -- must come last.
 drop role if exists migration_readonly;
 
 \echo '--- verification: role no longer exists ---'
