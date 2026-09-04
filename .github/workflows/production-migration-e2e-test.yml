@@ -211,10 +211,10 @@ jobs:
           PGPASSWORD: legacysimadminpw
         run: |
           # Reads the email straight out of legacy-sim into a shell variable
-          # -- never via a ${{ }} expression -- so the PII-shaped value is
-          # never resolved into this step's echoed command text. The query
-          # TEXT below (id = a fixed, non-PII synthetic UUID) is all that's
-          # ever visible in the log.
+          # -- never via a GitHub expression interpolation -- so the
+          # PII-shaped value is never resolved into this step's echoed
+          # command text. The query TEXT below (id = a fixed, non-PII
+          # synthetic UUID) is all that's ever visible in the log.
           COLLIDE_EMAIL="$(psql "postgresql://postgres@localhost:5433/postgres" -tAc \
             "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a2'")"
           STATUS_JSON="$(supabase status -o json)"
@@ -255,7 +255,7 @@ jobs:
         run: |
           # Same pattern as the collision-injection step: the master's
           # email is read from legacy-sim into a shell variable at
-          # runtime, never via a ${{ }} expression.
+          # runtime, never via a GitHub expression interpolation.
           MASTER_EMAIL="$(psql "postgresql://postgres@localhost:5433/postgres" -tAc \
             "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a1'")"
           STATUS_JSON="$(supabase status -o json)"
