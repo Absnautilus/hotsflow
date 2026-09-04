@@ -33,10 +33,10 @@ select array_agg(column_name order by ordinal_position) as lookup_view_columns
 from information_schema.columns
 where table_schema = 'public' and table_name = 'migration_readonly_auth_lookup';
 select coalesce(
-  (select array_agg(column_name order by ordinal_position)
+  (select array_agg(column_name::text order by ordinal_position)
    from information_schema.columns
    where table_schema = 'public' and table_name = 'migration_readonly_auth_lookup')
-  = array['staff_profile_id','auth_user_id','email'],
+  = array['staff_profile_id','auth_user_id','email']::text[],
   false
 ) as ok_columns \gset
 \if :ok_columns
