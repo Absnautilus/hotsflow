@@ -5,12 +5,33 @@
 -- faithfully) plus a minimal `auth.users(id, email)` stub, on a plain
 -- disposable Postgres container -- deliberately NOT a full Supabase
 -- stack for this side (no triggers/RLS/functions replayed; those are out
--- of scope for testing the migration mechanism itself). All data is
--- canary-tagged (contains the -v canary value) so the E2E workflow can
--- grep the whole run's log for it afterward and confirm it never
--- appears.
+-- of scope for testing the migration mechanism itself).
 --
--- Requires -v canary=<random-string>.
+-- TWO SEPARATE canary values, deliberately not one, so the log-leak test
+-- can tell apart "this is a harmless, expected label" from "this is
+-- PII-shaped data that must never be printed":
+--
+--   1. RUN_CANARY (-v canary=<random-string>, passed on the command line
+--      by the workflow): used ONLY for the hotel's own name. A hotel
+--      name is a business label, not personal data -- it is expected to
+--      appear in HOTEL_NAME env, command echoes and reconciliation
+--      output, exactly like "Palazzo Veneziano" would in production.
+--
+--   2. PII_CANARY: a FIXED literal, hardcoded below, used ONLY inside
+--      the fields that stand in for real PII in the legacy schema --
+--      staff name, staff login_username, auth.users.email, and
+--      stays.guest_last_name. Deliberately NOT passed as a `-v` psql
+--      variable and NOT derived from any `${{ }}` GitHub Actions
+--      expression anywhere in the workflow -- it lives only in this
+--      checked-in file's literal SQL text, so it can never appear on a
+--      command line or in a step's env: echo. The E2E workflow's
+--      `canary-log-scan` job greps the complete log of every job for
+--      this exact literal and fails the run if it finds even one
+--      occurrence -- that is the real test of whether the migration
+--      mechanism ever lets PII-shaped data reach stdout.
+\set pii_canary zzpiicanary7f2e9b4a1c
+--
+-- Requires -v canary=<random-string> (RUN_CANARY only).
 \set ON_ERROR_STOP on
 
 create schema if not exists auth;
@@ -27,14 +48,14 @@ create table guest_requests (id uuid primary key, hotel_id uuid not null referen
 insert into hotels values ('cccccccc-0000-0000-0000-000000000001', 'ZZCANARY_HOTEL_' || :'canary', 'Europe/Rome', true);
 
 insert into auth.users (id, email) values
-  ('cccccccc-0000-0000-0000-0000000000a1', 'zzcanary-master-' || :'canary' || '@example.test'),
-  ('cccccccc-0000-0000-0000-0000000000a2', 'zzcanary-op1-' || :'canary' || '@example.test'),
-  ('cccccccc-0000-0000-0000-0000000000a3', 'zzcanary-op2-' || :'canary' || '@example.test');
+  ('cccccccc-0000-0000-0000-0000000000a1', :'pii_canary' || '-master@example.test'),
+  ('cccccccc-0000-0000-0000-0000000000a2', :'pii_canary' || '-op1@example.test'),
+  ('cccccccc-0000-0000-0000-0000000000a3', :'pii_canary' || '-op2@example.test');
 
 insert into staff_profiles (id, hotel_id, auth_user_id, name, role, department, active, login_username) values
-  ('cccccccc-0000-0000-0000-0000000000a1', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a1', 'ZZCANARY Master ' || :'canary', 'master', null, true, null),
-  ('cccccccc-0000-0000-0000-0000000000a2', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a2', 'ZZCANARY Op Reception ' || :'canary', 'operatore', 'reception', true, 'zzcanary-op1'),
-  ('cccccccc-0000-0000-0000-0000000000a3', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a3', 'ZZCANARY Op Housekeeping ' || :'canary', 'operatore', 'housekeeping', true, 'zzcanary-op2');
+  ('cccccccc-0000-0000-0000-0000000000a1', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a1', 'PIICANARY Master ' || :'pii_canary', 'master', null, true, null),
+  ('cccccccc-0000-0000-0000-0000000000a2', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a2', 'PIICANARY Op Reception ' || :'pii_canary', 'operatore', 'reception', true, :'pii_canary' || '-op1'),
+  ('cccccccc-0000-0000-0000-0000000000a3', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-0000000000a3', 'PIICANARY Op Housekeeping ' || :'pii_canary', 'operatore', 'housekeeping', true, :'pii_canary' || '-op2');
 
 insert into rooms values
   ('cccccccc-0000-0000-0000-000000001001', 'cccccccc-0000-0000-0000-000000000001', '101', true),
@@ -47,7 +68,7 @@ insert into request_types values
   ('cccccccc-0000-0000-0000-000000003001', 'cccccccc-0000-0000-0000-000000002001', 'Extra towels', null, true, true, 0, null);
 
 insert into stays values
-  ('cccccccc-0000-0000-0000-000000004001', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000001001', 'ZZCANARY Guest ' || :'canary', now() - interval '1 day', now() + interval '1 day', 'active', 'manual', null, 'cccccccc-0000-0000-0000-0000000000a2');
+  ('cccccccc-0000-0000-0000-000000004001', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000001001', 'PIICANARY Guest ' || :'pii_canary', now() - interval '1 day', now() + interval '1 day', 'active', 'manual', null, 'cccccccc-0000-0000-0000-0000000000a2');
 
 insert into guest_requests (id, hotel_id, stay_id, room_number, request_type_id, status, assigned_department, priority, created_at) values
   ('cccccccc-0000-0000-0000-000000005001', 'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000004001', '101', 'cccccccc-0000-0000-0000-000000003001', 'requested', 'housekeeping', 1, now()),

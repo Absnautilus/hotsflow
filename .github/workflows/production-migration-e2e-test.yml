@@ -16,10 +16,38 @@ name: Production migration mechanism — E2E test (disposable only, no real syst
 # freeze-rehearsal.yml already use), needed because Auth migration must
 # exercise the real GoTrue Admin API.
 #
-# All seeded data is canary-tagged (contains a random per-run string).
-# After each job finishes, the orchestrating session fetches the full
-# job log via the GitHub API and greps it for that string -- concrete
-# evidence of no leak, not an assumption.
+# Two separate canary values (see scripts/production/e2e-test/seed_legacy_sim.sql
+# for the full rationale):
+#   - RUN_CANARY: random per-run string, used only for the hotel's own
+#     name (a business label, not PII -- expected in HOTEL_NAME env,
+#     command echoes, reconciliation output).
+#   - PII_CANARY: a fixed literal (defined once below and inside
+#     seed_legacy_sim.sql), planted ONLY in the fields that stand in for
+#     real PII -- staff name, login_username, auth.users.email,
+#     stays.guest_last_name. Never passed as a `-v` argument and never
+#     referenced via a `${{ }}` expression anywhere in this file, so it
+#     can never end up on a command line or in a step's env: echo --
+#     every place that needs it at runtime (the auth-collision injection,
+#     the rollback check) reads it back out of legacy-sim into a shell
+#     variable instead.
+#
+# The `canary-log-scan` job below is the real, automated proof: it runs
+# after both jobs finish, downloads each one's COMPLETE log via the
+# GitHub API, and fails the workflow if the PII_CANARY literal appears
+# even once. This replaces an earlier version of this comment that
+# described this check as something a human/agent would do by hand after
+# the fact -- it is now an enforced step of the workflow itself.
+#
+# PII_CANARY is deliberately NOT declared in any workflow/job/step `env:`
+# block (unlike RUN_CANARY's HOTEL_NAME use) -- env: blocks get echoed
+# into every step's "Run ..." log preamble regardless of whether that
+# step actually uses the value, which would defeat the whole point. The
+# literal `zzpiicanary7f2e9b4a1c` is instead written directly, in full,
+# only inside scripts/production/e2e-test/seed_legacy_sim.sql (checked-in
+# source, not a command-line argument) and inside the two `run:` scripts
+# below that need to compare against it -- both of which read the value
+# back at runtime via a database query into a shell variable, never via
+# a `${{ }}` expression, so the resolved value itself is never echoed.
 on:
   workflow_dispatch:
 
@@ -179,14 +207,24 @@ jobs:
           supabase db reset
 
       - name: Pre-create a colliding Auth user on target-sim (forces the 2nd creation to fail)
+        env:
+          PGPASSWORD: legacysimadminpw
         run: |
+          # Reads the email straight out of legacy-sim into a shell variable
+          # -- never via a ${{ }} expression -- so the PII-shaped value is
+          # never resolved into this step's echoed command text. The query
+          # TEXT below (id = a fixed, non-PII synthetic UUID) is all that's
+          # ever visible in the log.
+          COLLIDE_EMAIL="$(psql "postgresql://postgres@localhost:5433/postgres" -tAc \
+            "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a2'")"
           STATUS_JSON="$(supabase status -o json)"
           API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
           SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
+          PAYLOAD="$(jq -n --arg email "$COLLIDE_EMAIL" '{email: $email, password: "Collision!234", email_confirm: true}')"
           curl -s -X POST "$API_URL/auth/v1/admin/users" \
             -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
             -H "Content-Type: application/json" -H "User-Agent: migration-script/1.0" \
-            -d "{\"email\":\"zzcanary-op1-${{ steps.canary.outputs.value }}@example.test\",\"password\":\"Collision!234\",\"email_confirm\":true}" >/dev/null
+            -d "$PAYLOAD" >/dev/null
 
       - name: Run orchestrator — MUST fail at Auth migration and roll back
         env:
@@ -212,13 +250,20 @@ jobs:
           echo ">>> auth_failure_triggered: PASS (orchestrator correctly exited nonzero: $RC)"
 
       - name: Verify rollback — no hotel, no auth_remap rows, orphaned Auth user deleted
+        env:
+          PGPASSWORD: legacysimadminpw
         run: |
+          # Same pattern as the collision-injection step: the master's
+          # email is read from legacy-sim into a shell variable at
+          # runtime, never via a ${{ }} expression.
+          MASTER_EMAIL="$(psql "postgresql://postgres@localhost:5433/postgres" -tAc \
+            "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a1'")"
           STATUS_JSON="$(supabase status -o json)"
           API_URL="$(echo "$STATUS_JSON" | jq -r '.API_URL')"
           SERVICE_ROLE_KEY="$(echo "$STATUS_JSON" | jq -r '.SERVICE_ROLE_KEY // .SECRET_KEY // empty')"
           HOTEL_COUNT="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from hotels where id = 'cccccccc-0000-0000-0000-000000000001'")"
           REMAP_COUNT="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from auth_remap" 2>/dev/null || echo 0)"
-          MASTER_STILL_EXISTS="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from auth.users where email = 'zzcanary-master-${{ steps.canary.outputs.value }}@example.test'")"
+          MASTER_STILL_EXISTS="$(psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -tAc "select count(*) from auth.users where email = '$MASTER_EMAIL'")"
           echo "hotel_count=$HOTEL_COUNT auth_remap_count=$REMAP_COUNT master_auth_user_remaining=$MASTER_STILL_EXISTS"
           if [ "$HOTEL_COUNT" != "0" ] || [ "$REMAP_COUNT" != "0" ] || [ "$MASTER_STILL_EXISTS" != "0" ]; then
             echo "!!! FAIL: rollback left residue (hotel/auth_remap/orphaned Auth user)"
@@ -233,3 +278,57 @@ jobs:
             exit 1
           fi
           echo ">>> workspace_cleanup_on_failure: PASS"
+
+  # Real, automated proof that no PII-shaped data reached a log -- not an
+  # assumption, not a partial manual eyeball. Runs after both jobs finish
+  # (success or failure, via if: always()) and downloads each one's
+  # COMPLETE log through the GitHub API, then greps it for the exact
+  # PII_CANARY literal that seed_legacy_sim.sql plants only in
+  # staff_profiles.name/login_username, auth.users.email and
+  # stays.guest_last_name. The RUN_CANARY (used for HOTEL_NAME) is
+  # deliberately NOT checked here -- it is expected to appear (see the
+  # header comment above) and checking for it would only reproduce the
+  # earlier, invalid version of this test.
+  canary-log-scan:
+    runs-on: ubuntu-latest
+    needs: [happy-path, auth-failure-injection]
+    if: always()
+    permissions:
+      actions: read
+    steps:
+      - name: Download complete job logs and grep for the PII canary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          PII_CANARY="zzpiicanary7f2e9b4a1c"
+          FAIL=0
+          JOBS_JSON="$(curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")"
+          for JOB_NAME in "happy-path" "auth-failure-injection"; do
+            JOB_ID="$(echo "$JOBS_JSON" | jq -r --arg name "$JOB_NAME" '.jobs[] | select(.name == $name) | .id' | head -1)"
+            if [ -z "$JOB_ID" ]; then
+              echo "!!! FAIL: could not resolve job id for '$JOB_NAME' in this run"
+              FAIL=1
+              continue
+            fi
+            echo "=== scanning job '$JOB_NAME' (id=$JOB_ID) ==="
+            curl -sS -L -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/actions/jobs/$JOB_ID/logs" -o "/tmp/${JOB_NAME}.log"
+            OCCURRENCES="$(grep -c -F -- "$PII_CANARY" "/tmp/${JOB_NAME}.log" || true)"
+            OCCURRENCES="${OCCURRENCES:-0}"
+            echo ">>> PII_CANARY occurrences in '$JOB_NAME' complete log: $OCCURRENCES"
+            if [ "$OCCURRENCES" != "0" ]; then
+              echo "!!! FAIL: PII canary leaked into '$JOB_NAME' log -- offending line numbers:"
+              grep -n -F -- "$PII_CANARY" "/tmp/${JOB_NAME}.log" | cut -d: -f1
+              FAIL=1
+            fi
+            rm -f "/tmp/${JOB_NAME}.log"
+          done
+          if [ "$FAIL" != "0" ]; then
+            echo "!!! PII canary leak test FAILED"
+            exit 1
+          fi
+          echo ">>> PII_CANARY occurrences in complete logs = 0 (happy-path + auth-failure-injection)"
