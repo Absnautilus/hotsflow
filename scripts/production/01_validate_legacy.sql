@@ -14,6 +14,14 @@
 -- appears twice (once to print the breakdown, once to sum it) since a
 -- WITH-clause CTE only lives for the single statement it's attached to
 -- and can't be reused across two separate psql statements.
+--
+-- The staff_profiles_missing_email check reads
+-- public.migration_readonly_auth_lookup, NOT auth.users directly (see
+-- create_migration_auth_lookup.sql / 02_export_legacy.sql) --
+-- migration_readonly holds no privilege on the auth schema at all. This
+-- was the exact bug PRE-FLIGHT #14's first E2E re-run caught: this file
+-- still referenced auth.users directly after the rest of the redesign
+-- had already moved off it.
 \set ON_ERROR_STOP on
 
 \echo '--- anomaly checks (every "n" must be 0) ---'
@@ -35,7 +43,7 @@ select * from (
   union all select 'guest_requests.status invalid', count(*) from guest_requests where hotel_id = :'legacy_hotel_id' and status not in ('requested','in_progress','completed','cancelled')
   union all select 'bad_stay_range', count(*) from stays where hotel_id = :'legacy_hotel_id' and check_out_at <= check_in_at
   union all select 'stay_room_hotel_mismatch', count(*) from stays s join rooms r on r.id = s.room_id where s.hotel_id = :'legacy_hotel_id' and r.hotel_id <> s.hotel_id
-  union all select 'staff_profiles_missing_email', count(*) from staff_profiles sp where sp.hotel_id = :'legacy_hotel_id' and not exists (select 1 from auth.users au where au.id = sp.auth_user_id and au.email is not null)
+  union all select 'staff_profiles_missing_email', count(*) from staff_profiles sp where sp.hotel_id = :'legacy_hotel_id' and not exists (select 1 from public.migration_readonly_auth_lookup mal where mal.staff_profile_id = sp.id and mal.email is not null)
 ) checks
 order by check_name;
 
@@ -58,7 +66,7 @@ select coalesce(sum(n), 0) as anomaly_count from (
   union all select 'guest_requests.status invalid', count(*) from guest_requests where hotel_id = :'legacy_hotel_id' and status not in ('requested','in_progress','completed','cancelled')
   union all select 'bad_stay_range', count(*) from stays where hotel_id = :'legacy_hotel_id' and check_out_at <= check_in_at
   union all select 'stay_room_hotel_mismatch', count(*) from stays s join rooms r on r.id = s.room_id where s.hotel_id = :'legacy_hotel_id' and r.hotel_id <> s.hotel_id
-  union all select 'staff_profiles_missing_email', count(*) from staff_profiles sp where sp.hotel_id = :'legacy_hotel_id' and not exists (select 1 from auth.users au where au.id = sp.auth_user_id and au.email is not null)
+  union all select 'staff_profiles_missing_email', count(*) from staff_profiles sp where sp.hotel_id = :'legacy_hotel_id' and not exists (select 1 from public.migration_readonly_auth_lookup mal where mal.staff_profile_id = sp.id and mal.email is not null)
 ) checks \gset
 
 \echo :anomaly_count

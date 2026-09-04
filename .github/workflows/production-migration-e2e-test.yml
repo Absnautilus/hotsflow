@@ -265,14 +265,40 @@ jobs:
           export TARGET_DB_URL TARGET_API_URL TARGET_SERVICE_ROLE_KEY
           chmod +x scripts/production/orchestrate_production_migration.sh scripts/production/05_auth_migrate.sh
           set +e
-          scripts/production/orchestrate_production_migration.sh
+          scripts/production/orchestrate_production_migration.sh > "$RUNNER_TEMP/orchestrator.log" 2>&1
           RC=$?
           set -e
+          cat "$RUNNER_TEMP/orchestrator.log"
+
+          # Non-PII markers already printed by the orchestrator/05_auth_migrate.sh
+          # (structural stage labels + counts, never row content) -- asserting on
+          # them in order is the only way to know the failure happened at the
+          # intended Auth collision, not somewhere earlier in the pipeline. A
+          # bare RC != 0 check can't tell those apart (this caught the previous
+          # run: VALIDATION itself was failing, and RC != 0 alone made that look
+          # like a pass).
           if [ "$RC" -eq 0 ]; then
             echo "!!! FAIL: orchestrator succeeded despite the forced Auth collision"
             exit 1
           fi
-          echo ">>> auth_failure_triggered: PASS (orchestrator correctly exited nonzero: $RC)"
+          if ! grep -qF "=== 3. VALIDATION" "$RUNNER_TEMP/orchestrator.log" || ! grep -qF "VALIDATION: 0 anomalies." "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: VALIDATION was not reached / did not pass -- failure happened before the intended collision point"
+            exit 1
+          fi
+          if ! grep -qF "=== 4. EXPORT" "$RUNNER_TEMP/orchestrator.log" || ! grep -qF "Export complete:" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: EXPORT was not reached / did not complete -- failure happened before the intended collision point"
+            exit 1
+          fi
+          if ! grep -qF "=== 6. AUTH MIGRATION" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: the AUTH MIGRATION phase was never reached"
+            exit 1
+          fi
+          if ! grep -qF "Auth user creation failed" "$RUNNER_TEMP/orchestrator.log" || ! grep -qF ">>> auth_migration: FAIL" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: AUTH MIGRATION was reached but did not fail with the expected marker -- not proven to be the injected collision"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/orchestrator.log"
+          echo ">>> auth_failure_triggered: PASS (VALIDATION passed, EXPORT completed, AUTH MIGRATION reached and failed at the injected collision, orchestrator exited nonzero: $RC)"
 
       - name: Verify rollback — no hotel, no auth_remap rows, orphaned Auth user deleted
         env:
