@@ -4,15 +4,16 @@
 # reuses one Hotsflow Auth user per pair, and populates the permanent
 # `auth_remap` table 10_migrate_hotel.sql depends on.
 #
-# An existing target Auth identity is reused only when the staged email has
-# exactly one case-insensitive match in auth.users AND that identity is already
-# an established Hotsflow identity (profile + at least one membership). This is
-# the production case discovered during cutover. A bare/orphan Auth collision
-# is not silently adopted: creation is attempted and fails through the normal,
-# sanitized Admin API diagnostic path.
+# An existing target Auth identity is reused when the staged email has exactly
+# one case-insensitive match in auth.users AND that identity is already an
+# established Hotsflow identity (profile + at least one membership).
 #
-# Existing users are never modified or deleted. Zero matches means create a
-# new Auth user; more than one match is treated as ambiguity and fails closed.
+# Recovery exception: if a previous production attempt created a bare Auth
+# user and then failed later in the SQL phase, that same bare identity may be
+# reused only when the persistent auth_remap table already proves the exact
+# legacy_id -> auth_id mapping from the prior attempt. A bare collision without
+# that provenance is still rejected through the normal sanitized email_exists
+# path. Existing users are never modified or deleted by this script.
 #
 # Passwords are never carried over from legacy (never read, never available
 # to this script). A fresh deterministic value is generated only for genuinely
@@ -44,6 +45,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
 CREATED_IDS=()
 MAPPED=0
 REUSED=0
+RECOVERED=0
 FAILED=0
 
 # File, not a variable: create_auth_user is invoked through command
@@ -101,9 +103,29 @@ SQL
       echo ">>> auth_identity_reuse: PASS (established existing Hotsflow identity reused; PII withheld)"
       continue
     fi
-    # A bare Auth collision is deliberately not adopted. Fall through to the
-    # Admin API create path so the existing sanitized email_exists diagnostic
-    # remains the failure mode and the E2E collision test remains meaningful.
+
+    # Recovery path for a user created by an earlier production attempt that
+    # passed Auth but failed later in SQL. We only adopt the bare identity when
+    # the persistent mapping already contains this exact legacy/auth pair.
+    prior_mapping_matches="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v legacy_id="$legacy_id" -v auth_id="$existing_id" -tA <<'SQL'
+select exists(
+  select 1
+  from public.auth_remap ar
+  where ar.legacy_auth_user_id = :'legacy_id'::uuid
+    and ar.new_auth_user_id = :'auth_id'::uuid
+)::int;
+SQL
+)"
+    if [ "$prior_mapping_matches" = "1" ]; then
+      MAPPED=$((MAPPED + 1))
+      RECOVERED=$((RECOVERED + 1))
+      echo ">>> auth_identity_recovery: PASS (prior-attempt mapped Auth identity reused; PII withheld)"
+      continue
+    fi
+
+    # A bare Auth collision without prior-attempt provenance is deliberately
+    # not adopted. Fall through to the Admin API create path so the existing
+    # sanitized email_exists diagnostic remains the fail-closed behavior.
   elif [ "$existing_count" != "0" ]; then
     echo "!!! Auth identity lookup ambiguous for legacy_id=$legacy_id (email withheld from log; exact-email matches=$existing_count)"
     FAILED=1
@@ -131,4 +153,4 @@ if [ "$FAILED" = "1" ]; then
   exit 1
 fi
 
-echo ">>> auth_migration: PASS ($MAPPED staff mapped; $REUSED established existing Auth identities reused)"
+echo ">>> auth_migration: PASS ($MAPPED staff mapped; $REUSED established existing Auth identities reused; $RECOVERED prior-attempt identities recovered)"
