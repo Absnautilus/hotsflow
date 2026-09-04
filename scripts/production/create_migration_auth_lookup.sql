@@ -30,6 +30,19 @@
 -- extra risk surface buys nothing. All object references below are
 -- schema-qualified even so, so creation itself does not depend on
 -- search_path either.
+--
+-- REVOKE lists anon, authenticated, service_role explicitly, not just
+-- public: the real run against the real legacy project (structural
+-- verification workflow run 33878792799) found those three roles
+-- already held full CRUD (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/
+-- REFERENCES/TRIGGER/MAINTAIN) on the freshly created view -- this
+-- Supabase project has schema-level ALTER DEFAULT PRIVILEGES granting
+-- those PostgREST-facing roles access to every new object in public by
+-- default, and `revoke all ... from public` does not touch grants made
+-- directly to a named role. Deliberately does NOT touch that
+-- schema-level default-privileges configuration itself (out of scope,
+-- affects every other object in the schema) -- only revokes what ended
+-- up on this one view.
 \set ON_ERROR_STOP on
 
 create view public.migration_readonly_auth_lookup
@@ -45,8 +58,13 @@ join auth.users au on au.id = sp.auth_user_id;
 comment on view public.migration_readonly_auth_lookup is
   'TEMPORARY -- PRE-FLIGHT #14 / Auth migration phase. Exposes only (staff_profile_id, auth_user_id, email) for staff with a linked auth.users row -- never password/hash/metadata, never the full auth.users table. Owned by the admin role so migration_readonly can read it without any grant on the auth schema itself. Drop after cutover -- see cleanup_post_cutover.sql.';
 
-revoke all on public.migration_readonly_auth_lookup from public;
-grant select on public.migration_readonly_auth_lookup to migration_readonly;
+revoke all privileges
+on public.migration_readonly_auth_lookup
+from public, anon, authenticated, service_role;
+
+grant select
+on public.migration_readonly_auth_lookup
+to migration_readonly;
 
 \echo '--- verification: exactly these 3 columns, granted only to migration_readonly ---'
 select grantee, privilege_type

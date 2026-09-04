@@ -1,19 +1,32 @@
 -- One-off, non-destructive GATE for the migration_readonly credential on
 -- the REAL legacy Housekeeping project. Every requirement below is both
 -- printed (for human review) AND asserted: a violated requirement makes
--- this script \quit with a non-zero exit status, so the calling
--- workflow (run with -v ON_ERROR_STOP=1) fails the GitHub Actions job --
--- this is a gate, not a report a human has to read carefully to catch a
--- problem.
+-- this script fail via a DO $$ ... RAISE EXCEPTION $$; block, so under
+-- -v ON_ERROR_STOP=1 psql exits non-zero and the calling workflow fails
+-- the GitHub Actions job -- this is a gate, not a report a human has to
+-- read carefully to catch a problem.
+--
+-- NOT `\quit <n>`: an earlier version of this file used `\quit 1` on
+-- failure. The real run of the sibling script
+-- (verify_auth_lookup_view_created.sql, workflow run 33878792799)
+-- against the real legacy project proved `\quit <n>` does not set
+-- psql's process exit code in the psql client this runner has -- the
+-- job reported success even though the script had printed FAIL. RAISE
+-- EXCEPTION inside a DO block is pure control flow, not a data write,
+-- so it is compatible with a read-only session
+-- (default_transaction_read_only = on) -- this was the real, checked
+-- concern that ruled out DO/RAISE EXCEPTION when this file was first
+-- written, and it turned out to be unfounded: RAISE never touches heap
+-- or index data, so the read-only-transaction guard never blocks it.
+-- \set ON_ERROR_STOP on then makes psql itself exit non-zero on the
+-- resulting SQL error, the same way it already did for every other real
+-- error hit earlier in this engagement (the "permission denied for
+-- schema auth" and sql_identifier[]/text[] cast errors both correctly
+-- failed their jobs this way).
 --
 -- Metadata and privilege introspection only -- no row content is ever
 -- read except a handful of count(*)/array_agg(column_name) results,
--- none of them PII. No write is attempted anywhere -- every assertion
--- technique below (\gset capturing a SELECT result, \if, \quit) is
--- purely read-only; nothing here requires DO/RAISE EXCEPTION (whose
--- compatibility with a read-only session was a real, checked concern,
--- not an assumption -- see setup_readonly_role.sql/
--- default_transaction_read_only for why that matters here).
+-- none of them PII.
 --
 -- migration_readonly holds NO privilege on the auth schema at all (see
 -- setup_readonly_role.sql / create_migration_auth_lookup.sql) -- no
@@ -41,7 +54,11 @@ select coalesce(current_user = 'migration_readonly', false) as ok_role \gset
   \echo 'PASS: current_user = migration_readonly'
 \else
   \echo 'FAIL: current_user is NOT migration_readonly -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: current_user is NOT migration_readonly -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 2. source confirmation: the real hotel must be present (count = 1) ==='
@@ -51,7 +68,11 @@ select coalesce((select count(*) from hotels where id = '25b00bec-1602-46e9-bf52
   \echo 'PASS: real hotel present exactly once'
 \else
   \echo 'FAIL: real hotel not present exactly once -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: real hotel not present exactly once -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 3. session-level read-only enforcement must be "on" ==='
@@ -61,7 +82,11 @@ select coalesce(current_setting('transaction_read_only') = 'on', false) as ok_re
   \echo 'PASS: transaction_read_only = on'
 \else
   \echo 'FAIL: transaction_read_only is NOT on -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: transaction_read_only is NOT on -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 4. SELECT privilege on all 7 migrated tables (every column must be true) ==='
@@ -87,7 +112,11 @@ select coalesce(
   \echo 'PASS: SELECT granted on all 7 tables'
 \else
   \echo 'FAIL: SELECT missing on at least one of the 7 tables -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: SELECT missing on at least one of the 7 tables -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 5. write privileges (INSERT/UPDATE/DELETE/TRUNCATE) on all 7 tables -- every column below must be false ==='
@@ -154,7 +183,11 @@ select coalesce(not (
   \echo 'PASS: no write privilege on any of the 7 tables'
 \else
   \echo 'FAIL: at least one write privilege is granted on a migrated table -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: at least one write privilege is granted on a migrated table -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 6. no privilege on the auth schema at all (must be false) ==='
@@ -164,7 +197,11 @@ select coalesce(not has_schema_privilege(current_user, 'auth', 'USAGE'), false) 
   \echo 'PASS: no USAGE privilege on schema auth'
 \else
   \echo 'FAIL: migration_readonly has USAGE on schema auth -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly has USAGE on schema auth -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 7. public.migration_readonly_auth_lookup exists (count must be 1) ==='
@@ -174,7 +211,11 @@ select coalesce((select count(*) from pg_views where schemaname = 'public' and v
   \echo 'PASS: lookup view exists exactly once'
 \else
   \echo 'FAIL: lookup view missing or duplicated -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: lookup view missing or duplicated -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 8. the view exposes exactly these columns, in this order (column names only, not data) ==='
@@ -192,7 +233,11 @@ select coalesce(
   \echo 'PASS: view exposes exactly (staff_profile_id, auth_user_id, email)'
 \else
   \echo 'FAIL: view columns do not match exactly (staff_profile_id, auth_user_id, email) -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: view columns do not match exactly (staff_profile_id, auth_user_id, email) -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 9. migration_readonly holds SELECT on the view ==='
@@ -202,7 +247,11 @@ select coalesce(has_table_privilege('migration_readonly', 'public.migration_read
   \echo 'PASS: migration_readonly has SELECT on the view'
 \else
   \echo 'FAIL: migration_readonly does NOT have SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly does NOT have SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 10. PUBLIC does NOT hold SELECT on the view -- catalog-level check, not has_table_privilege(''public'', ...) ==='
@@ -231,7 +280,11 @@ select coalesce(
   \echo 'PASS: no ACL entry grants SELECT to PUBLIC on the view'
 \else
   \echo 'FAIL: PUBLIC holds SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: PUBLIC holds SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 11. no grantee other than migration_readonly or the view owner holds SELECT on the view ==='
@@ -270,7 +323,11 @@ select coalesce(
   \echo 'PASS: no grantee other than migration_readonly/owner holds SELECT on the view'
 \else
   \echo 'FAIL: an unexpected role holds SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: an unexpected role holds SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 12. migration_readonly does not hold SELECT WITH GRANT OPTION on the view ==='
@@ -299,7 +356,11 @@ select coalesce(
   \echo 'PASS: migration_readonly does not have WITH GRANT OPTION on the view'
 \else
   \echo 'FAIL: migration_readonly holds WITH GRANT OPTION on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly holds WITH GRANT OPTION on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 13. the view is not security_invoker=true (it must run as its owner, not as migration_readonly, to read auth.users) ==='
@@ -318,7 +379,11 @@ select coalesce(
   \echo 'PASS: view is not security_invoker=true'
 \else
   \echo 'FAIL: view is security_invoker=true -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: view is security_invoker=true -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 14. no superuser/admin-level role attribute ==='
@@ -336,7 +401,11 @@ select coalesce(
   \echo 'PASS: no superuser/createrole/createdb/bypassrls'
 \else
   \echo 'FAIL: role has a superuser-adjacent attribute -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: role has a superuser-adjacent attribute -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 15. end-to-end proof: every real-hotel staff member resolves to a lookup row with a non-null email (counts only, no email/name ever printed) ==='
@@ -362,7 +431,11 @@ select coalesce(
   \echo 'PASS: staff_total = staff_with_lookup_email and staff_missing_lookup_email = 0'
 \else
   \echo 'FAIL: not every real-hotel staff member resolves to a lookup row with a non-null email -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: not every real-hotel staff member resolves to a lookup row with a non-null email -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo ''

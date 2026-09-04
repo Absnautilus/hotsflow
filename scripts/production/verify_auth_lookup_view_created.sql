@@ -4,9 +4,23 @@
 -- from the full PRE-FLIGHT #14 gate (verify_readonly_credential.sql),
 -- not a re-run of it. Never reads view content, never touches
 -- auth.users. Every requirement is printed (for human review) AND
--- asserted via \gset + \if + \quit 1 -- run with -v ON_ERROR_STOP=1, so
--- a violation fails the calling GitHub Actions job, not just something
--- printed for a human to notice.
+-- asserted via \gset + \if + a DO $$ ... RAISE EXCEPTION $$; block on
+-- failure -- run with -v ON_ERROR_STOP=1, so a violation makes psql
+-- exit non-zero and fails the calling GitHub Actions job, not just
+-- something printed for a human to notice.
+--
+-- NOT `\quit 1`: the real run against the real legacy project (workflow
+-- run 33878792799) proved that `\quit <n>` does not set psql's process
+-- exit code in the psql client this runner has -- the calling step
+-- reported success even though check 7 below had printed FAIL. RAISE
+-- EXCEPTION inside a DO block is pure control flow, not a data write,
+-- so it runs fine under a read-only session (default_transaction_read_only
+-- = on) -- and \set ON_ERROR_STOP on then makes psql itself exit
+-- non-zero on the resulting SQL error, which is what actually happened,
+-- confirmed, for every other real error hit earlier in this engagement
+-- (e.g. the "permission denied for schema auth" and the
+-- sql_identifier[]/text[] cast errors both correctly failed their jobs
+-- this same way).
 \set ON_ERROR_STOP on
 
 \echo '=== connection identity (context only) ==='
@@ -22,7 +36,11 @@ select coalesce(
   \echo 'PASS: object is a VIEW'
 \else
   \echo 'FAIL: object is missing or not a VIEW -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: object is missing or not a VIEW -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 2. view owner (role name only, not PII -- the admin role that ran create_migration_auth_lookup.sql) ==='
@@ -43,7 +61,11 @@ select coalesce(
   \echo 'PASS: view exposes exactly (staff_profile_id, auth_user_id, email)'
 \else
   \echo 'FAIL: view columns do not match exactly -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: view columns do not match exactly -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 4. security_invoker is not true ==='
@@ -60,7 +82,11 @@ select coalesce(
   \echo 'PASS: view is not security_invoker=true'
 \else
   \echo 'FAIL: view is security_invoker=true -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: view is security_invoker=true -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 5. migration_readonly holds explicit SELECT on the view ==='
@@ -70,7 +96,11 @@ select coalesce(has_table_privilege('migration_readonly', 'public.migration_read
   \echo 'PASS: migration_readonly has SELECT on the view'
 \else
   \echo 'FAIL: migration_readonly does NOT have SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly does NOT have SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 6. PUBLIC does NOT hold SELECT on the view (grantee = 0 is the ACL convention for PUBLIC) ==='
@@ -98,7 +128,11 @@ select coalesce(
   \echo 'PASS: no ACL entry grants SELECT to PUBLIC on the view'
 \else
   \echo 'FAIL: PUBLIC holds SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: PUBLIC holds SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 7. no grantee other than migration_readonly or the view owner holds SELECT on the view ==='
@@ -122,7 +156,11 @@ select coalesce(
   \echo 'PASS: no grantee other than migration_readonly/owner holds SELECT on the view'
 \else
   \echo 'FAIL: an unexpected role holds SELECT on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: an unexpected role holds SELECT on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 8. migration_readonly does not hold SELECT WITH GRANT OPTION on the view ==='
@@ -143,7 +181,11 @@ select coalesce(
   \echo 'PASS: migration_readonly does not have WITH GRANT OPTION on the view'
 \else
   \echo 'FAIL: migration_readonly holds WITH GRANT OPTION on the view -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly holds WITH GRANT OPTION on the view -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 9. migration_readonly still has no USAGE on schema auth ==='
@@ -153,7 +195,11 @@ select coalesce(not has_schema_privilege(current_user, 'auth', 'USAGE'), false) 
   \echo 'PASS: no USAGE privilege on schema auth'
 \else
   \echo 'FAIL: migration_readonly has USAGE on schema auth -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: migration_readonly has USAGE on schema auth -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo '=== 10. no write privilege was added to the role on the 7 migrated tables -- every column below must be false ==='
@@ -220,7 +266,11 @@ select coalesce(not (
   \echo 'PASS: no write privilege on any of the 7 tables'
 \else
   \echo 'FAIL: at least one write privilege is granted on a migrated table -- aborting gate'
-  \quit 1
+  DO $$
+  BEGIN
+    RAISE EXCEPTION 'Gate failed: at least one write privilege is granted on a migrated table -- aborting gate';
+  END
+  $$;
 \endif
 
 \echo ''

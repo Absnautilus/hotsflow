@@ -1,0 +1,160 @@
+name: Test gate mechanism — fail-closed RAISE EXCEPTION + view ACL check (disposable only)
+
+# Manual only. Proves, with real evidence rather than assumption, the two
+# properties the PRE-FLIGHT #14 gate fix (workflow run 33878792799
+# findings) depends on:
+#
+#   (a) the DO $$ ... RAISE EXCEPTION $$; mechanism that replaced every
+#       `\quit 1` in verify_readonly_credential.sql and
+#       verify_auth_lookup_view_created.sql actually makes psql exit
+#       non-zero -- `\quit 1` was found NOT to on this runner's psql
+#       client (`warning: \quit: extra argument "1" ignored`, exit 0
+#       regardless of the printed FAIL).
+#
+#   (b) the ACL check in verify_auth_lookup_view_created.sql (item 7:
+#       no grantee other than migration_readonly/owner may hold SELECT
+#       on the view) really does fail the gate when anon/authenticated/
+#       service_role hold SELECT on the view -- the exact leak found on
+#       the real legacy project -- and really does pass again once that
+#       grant is removed by the fixed create_migration_auth_lookup.sql
+#       REVOKE list.
+#
+# Everything here is disposable: a plain postgres:15 service container
+# (port 5435, distinct from production-migration-e2e-test.yml's
+# legacy-sim on 5433, even though each workflow run is fully isolated --
+# keeping them apart avoids any ambiguity when reading logs side by
+# side), a synthetic migration_readonly role/password, and synthetic
+# anon/authenticated/service_role roles created here purely to mimic
+# the real Supabase project's baseline (those three roles always
+# pre-exist there; create_migration_auth_lookup.sql's REVOKE clause
+# names them explicitly and would error with "role does not exist" if
+# they were not created first). No real secret is referenced anywhere
+# in this file, and it never touches the real legacy or Hotsflow
+# projects.
+on:
+  workflow_dispatch:
+
+jobs:
+  test-gate-mechanism:
+    runs-on: ubuntu-latest
+    services:
+      legacy-sim2:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: gatetestadminpw
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Property (a) — fail_closed_probe.sql must make psql exit non-zero
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          set +e
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 \
+            -f scripts/production/e2e-test/fail_closed_probe.sql
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo "!!! FAIL: fail_closed_probe.sql exited 0 -- the RAISE EXCEPTION mechanism did not abort psql"
+            exit 1
+          fi
+          echo ">>> fail_closed_mechanism: PASS (probe correctly aborted psql, exit code $RC)"
+
+      - name: Generate canary string
+        id: canary
+        run: echo "value=zzgate$(date +%s)$RANDOM" >> "$GITHUB_OUTPUT"
+
+      - name: Create anon/authenticated/service_role roles (mimics the real Supabase baseline)
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 -c "
+            create role anon;
+            create role authenticated;
+            create role service_role;
+          "
+
+      - name: Seed legacy-sim2 (canary-tagged synthetic data)
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 \
+            -v canary="${{ steps.canary.outputs.value }}" \
+            -f scripts/production/e2e-test/seed_legacy_sim.sql
+
+      - name: Create migration_readonly role on legacy-sim2
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 \
+            -v role_password="e2e-gate-test-readonly-pw" \
+            -f scripts/production/setup_readonly_role.sql
+
+      - name: Create migration_readonly_auth_lookup view on legacy-sim2 (fixed REVOKE list)
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 \
+            -f scripts/production/create_migration_auth_lookup.sql
+
+      - name: Baseline — gate must PASS (exit 0) with no extra grantees
+        run: |
+          set +e
+          PGPASSWORD=e2e-gate-test-readonly-pw psql "postgresql://migration_readonly@localhost:5435/postgres" \
+            -v ON_ERROR_STOP=1 -f scripts/production/verify_auth_lookup_view_created.sql
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            echo "!!! FAIL: gate did not pass on a correctly-scoped view (exit code $RC)"
+            exit 1
+          fi
+          echo ">>> baseline_pass: PASS (gate exited 0 on a correctly-scoped view)"
+
+      - name: Inject the real-world leak — grant SELECT to anon/authenticated/service_role
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 -c "
+            grant select on public.migration_readonly_auth_lookup to anon, authenticated, service_role;
+          "
+
+      - name: Property (b) — gate must now FAIL (exit non-zero) with extra grantees present
+        run: |
+          set +e
+          PGPASSWORD=e2e-gate-test-readonly-pw psql "postgresql://migration_readonly@localhost:5435/postgres" \
+            -v ON_ERROR_STOP=1 -f scripts/production/verify_auth_lookup_view_created.sql
+          RC=$?
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo "!!! FAIL: gate exited 0 despite anon/authenticated/service_role holding SELECT on the view -- ACL check did not catch the injected leak"
+            exit 1
+          fi
+          echo ">>> acl_leak_detected: PASS (gate correctly aborted, exit code $RC)"
+
+      - name: Remove the injected leak — revoke SELECT from anon/authenticated/service_role
+        env:
+          PGPASSWORD: gatetestadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5435/postgres" -v ON_ERROR_STOP=1 -c "
+            revoke all privileges on public.migration_readonly_auth_lookup from anon, authenticated, service_role;
+          "
+
+      - name: Gate must PASS again (exit 0) once the injected leak is removed
+        run: |
+          set +e
+          PGPASSWORD=e2e-gate-test-readonly-pw psql "postgresql://migration_readonly@localhost:5435/postgres" \
+            -v ON_ERROR_STOP=1 -f scripts/production/verify_auth_lookup_view_created.sql
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            echo "!!! FAIL: gate did not pass again after the injected leak was revoked (exit code $RC)"
+            exit 1
+          fi
+          echo ">>> pass_restored: PASS (gate exited 0 again after the leak was revoked)"
