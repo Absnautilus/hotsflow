@@ -1,0 +1,13 @@
+-- Structural regression fixture for the staff-profile reuse cutover.
+-- This file is intentionally non-executable in production; it documents the
+-- invariants CI/rehearsal must exercise when this path is wired into a test run.
+--
+-- 1. One legacy staff row maps to an Auth user that already owns a target
+--    staff_profiles row with a different id.
+-- 2. Migration must keep that target staff_profiles.id, move the row to the
+--    migrating hotel, and synchronize module-local fields.
+-- 3. Legacy accepted_by / created_by_staff / stays.created_by references to
+--    the legacy staff id must resolve to the reused target staff id.
+-- 4. Staff identities without an existing target staff row must preserve their
+--    legacy staff id exactly.
+-- 5. Total migrated staff count must still equal source staff count.
