@@ -28,12 +28,19 @@ sanitize_auth_error() {
 }
 
 # $1=email $2=password -> prints new id on stdout, or "FAILED". On
-# failure, also sets AUTH_CREATE_LAST_ERROR (global) to a sanitized
-# diagnostic string via sanitize_auth_error -- never the raw body, never
-# the email/password/key used in this call. Callers that only check the
-# stdout FAILED sentinel (the existing contract, unchanged) are
-# unaffected; callers that want the reason read AUTH_CREATE_LAST_ERROR
-# after a FAILED result.
+# failure, if AUTH_CREATE_ERROR_FILE is set, also writes a sanitized
+# diagnostic there via sanitize_auth_error -- never the raw body, never
+# the email/password/key used in this call. Deliberately a FILE, not a
+# global variable: every caller invokes this via `new_id="$(create_auth_user ...)"`,
+# which runs the function in a subshell (command substitution) -- a plain
+# variable assignment made inside would be invisible to the caller once
+# that subshell exits. A file survives the subshell boundary; a variable
+# does not (this was tried first and silently failed exactly that way in
+# an earlier version of this diagnostic, confirmed by a real disposable
+# E2E run -- "diagnostic: no diagnostic available" even on a real
+# failure). Callers that don't set AUTH_CREATE_ERROR_FILE (every existing
+# caller except 05_auth_migrate.sh) are unaffected -- the stdout contract
+# (id, or the literal "FAILED") is unchanged either way.
 create_auth_user() {
   local email="$1" password="$2" resp status body
   resp="$(curl -s -w '\n%{http_code}' -X POST "$API_URL/auth/v1/admin/users" \
@@ -42,10 +49,11 @@ create_auth_user() {
     -d "{\"email\":\"$email\",\"password\":\"$password\",\"email_confirm\":true}")"
   status="$(echo "$resp" | tail -1)"; body="$(echo "$resp" | sed '$d')"
   if [ "$status" = "200" ]; then
-    AUTH_CREATE_LAST_ERROR=""
     echo "$body" | jq -r '.id'
   else
-    AUTH_CREATE_LAST_ERROR="$(sanitize_auth_error "$status" "$body")"
+    if [ -n "${AUTH_CREATE_ERROR_FILE:-}" ]; then
+      sanitize_auth_error "$status" "$body" > "$AUTH_CREATE_ERROR_FILE"
+    fi
     echo "FAILED"
   fi
 }

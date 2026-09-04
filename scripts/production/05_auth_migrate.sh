@@ -52,7 +52,14 @@ CREATED_IDS=()
 MAPPED=0
 FAILED=0
 
+# File, not a variable: create_auth_user runs inside command substitution
+# ("$(create_auth_user ...)"), which is a subshell -- a variable it set
+# would never be visible here. See lib.sh for the full explanation.
+AUTH_CREATE_ERROR_FILE="$(mktemp)"
+export AUTH_CREATE_ERROR_FILE
+
 cleanup_on_failure() {
+  rm -f "$AUTH_CREATE_ERROR_FILE"
   if [ "$FAILED" = "1" ] && [ "${#CREATED_IDS[@]}" -gt 0 ]; then
     echo "=== Auth migration failed -- rolling back ${#CREATED_IDS[@]} already-created user(s) ==="
     for id in "${CREATED_IDS[@]}"; do
@@ -67,9 +74,11 @@ trap cleanup_on_failure EXIT
 while IFS=, read -r legacy_id email; do
   [ -z "$legacy_id" ] && continue
   pw="$(pw_for_id "$legacy_id")"
+  : > "$AUTH_CREATE_ERROR_FILE"
   new_id="$(create_auth_user "$email" "$pw")"
   if [ "$new_id" = "FAILED" ]; then
-    echo "!!! Auth user creation failed for legacy_id=$legacy_id (email withheld from log) -- diagnostic: ${AUTH_CREATE_LAST_ERROR:-no diagnostic available}"
+    diagnostic="$(cat "$AUTH_CREATE_ERROR_FILE" 2>/dev/null)"
+    echo "!!! Auth user creation failed for legacy_id=$legacy_id (email withheld from log) -- diagnostic: ${diagnostic:-no diagnostic available}"
     FAILED=1
     break
   fi
