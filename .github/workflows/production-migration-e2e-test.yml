@@ -59,6 +59,16 @@ name: Production migration mechanism — E2E test (disposable only, no real syst
 # staff email through this view, never through auth.users directly, so
 # this step is required for the orchestrator run further down to
 # succeed, not just cosmetic.
+#
+# create_migration_auth_lookup.sql now REVOKEs from anon/authenticated/
+# service_role explicitly, not just public (real ACL leak found on the
+# real legacy project, workflow run 33878792799 -- those three roles
+# pre-exist on every real Supabase project via schema-level default
+# privileges, which this disposable plain-Postgres container does not
+# have). Each job creates those three roles on legacy-sim immediately
+# before running create_migration_auth_lookup.sql so that REVOKE is a
+# safe no-op here, exactly mirroring test-gate-mechanism.yml's disposable
+# container.
 on:
   workflow_dispatch:
 
@@ -101,6 +111,16 @@ jobs:
           psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
             -v role_password="e2e-test-readonly-pw" \
             -f scripts/production/setup_readonly_role.sql
+
+      - name: Create anon/authenticated/service_role roles on legacy-sim (mimics the real Supabase baseline)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 -c "
+            create role anon;
+            create role authenticated;
+            create role service_role;
+          "
 
       - name: Create migration_readonly_auth_lookup view on legacy-sim (PRE-FLIGHT #14 redesign)
         env:
@@ -214,6 +234,16 @@ jobs:
           psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
             -v role_password="e2e-test-readonly-pw" \
             -f scripts/production/setup_readonly_role.sql
+
+      - name: Create anon/authenticated/service_role roles on legacy-sim (mimics the real Supabase baseline)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 -c "
+            create role anon;
+            create role authenticated;
+            create role service_role;
+          "
 
       - name: Create migration_readonly_auth_lookup view on legacy-sim (PRE-FLIGHT #14 redesign)
         env:
