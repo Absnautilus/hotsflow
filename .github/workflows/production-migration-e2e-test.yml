@@ -297,6 +297,41 @@ jobs:
             echo "!!! FAIL: AUTH MIGRATION was reached but did not fail with the expected marker -- not proven to be the injected collision"
             exit 1
           fi
+
+          # Diagnostic-mechanism check (real run 33884207538 hit exactly
+          # this FAILED path with no usable reason at all -- create_auth_user
+          # used to discard the response body entirely on non-200). The
+          # sanitized diagnostic (lib.sh's sanitize_auth_error: HTTP status
+          # plus .code/.error_code/.msg/.message only) must actually have
+          # fired.
+          if ! grep -qF "diagnostic: http_status=" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: sanitized Auth error diagnostic was not printed -- create_auth_user/sanitize_auth_error did not fire as expected"
+            exit 1
+          fi
+
+          # No-PII-in-diagnostic check: re-derive the exact colliding email
+          # and the exact deterministic password 05_auth_migrate.sh would
+          # have generated for that legacy id -- never via a ${{ }}
+          # expression, so neither value is ever resolved into this step's
+          # echoed command text -- and confirm neither, nor the service
+          # role key, leaked into the log via the new diagnostic.
+          COLLIDE_EMAIL="$(PGPASSWORD=legacysimadminpw psql "postgresql://postgres@localhost:5433/postgres" -tAc \
+            "select email from auth.users where id = 'cccccccc-0000-0000-0000-0000000000a2'")"
+          COLLIDE_PASSWORD="Migrated$(echo 'cccccccc-0000-0000-0000-0000000000a2' | tr -dc '0-9' | cut -c1-8)!Aa"
+          if grep -qF "$COLLIDE_EMAIL" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: the colliding email leaked into the orchestrator log"
+            exit 1
+          fi
+          if grep -qF "$COLLIDE_PASSWORD" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: a generated password leaked into the orchestrator log"
+            exit 1
+          fi
+          if grep -qF "$TARGET_SERVICE_ROLE_KEY" "$RUNNER_TEMP/orchestrator.log"; then
+            echo "!!! FAIL: the service role key leaked into the orchestrator log"
+            exit 1
+          fi
+          echo ">>> auth_error_diagnostic_no_pii: PASS (sanitized diagnostic present; email/password/service-role-key absent from the log)"
+
           rm -f "$RUNNER_TEMP/orchestrator.log"
           echo ">>> auth_failure_triggered: PASS (VALIDATION passed, EXPORT completed, AUTH MIGRATION reached and failed at the injected collision, orchestrator exited nonzero: $RC)"
 

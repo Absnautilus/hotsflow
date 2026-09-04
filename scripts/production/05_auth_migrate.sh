@@ -15,6 +15,16 @@
 # rehearsal. Staff must reset it after migration; this script's job is
 # only to create a working account, not to preserve a real credential.
 #
+# On a failed creation, prints a sanitized diagnostic alongside the
+# legacy_id -- HTTP status plus the Admin API's .code/.error_code/.msg/
+# .message fields only (lib.sh's create_auth_user/sanitize_auth_error;
+# real run 33884207538 hit this exact FAILED path with only "creation
+# failed" and no usable reason, since the prior version of create_auth_user
+# discarded the response body entirely on non-200). Never the full
+# response body, never email/password/service-role key -- see lib.sh for
+# the exact field allowlist and the defense-in-depth email-pattern
+# scrub applied to each field before it is ever printed.
+#
 # Usage: DB_URL=... API_URL=... SERVICE_ROLE_KEY=... \
 #   05_auth_migrate.sh <staff_csv_path>
 set -uo pipefail
@@ -59,7 +69,7 @@ while IFS=, read -r legacy_id email; do
   pw="$(pw_for_id "$legacy_id")"
   new_id="$(create_auth_user "$email" "$pw")"
   if [ "$new_id" = "FAILED" ]; then
-    echo "!!! Auth user creation failed for legacy_id=$legacy_id (email withheld from log)"
+    echo "!!! Auth user creation failed for legacy_id=$legacy_id (email withheld from log) -- diagnostic: ${AUTH_CREATE_LAST_ERROR:-no diagnostic available}"
     FAILED=1
     break
   fi
