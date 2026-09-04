@@ -45,6 +45,12 @@ grant select on
   hotels, staff_profiles, rooms, stays, request_categories, request_types, guest_requests
 to migration_readonly;
 
+-- Schema-level USAGE is required before any table/column grant inside a
+-- non-default schema has any effect at all -- caught by the E2E test's
+-- first real run (VALIDATION failed with "permission denied for schema
+-- auth" even though the column grant below was already correct).
+grant usage on schema auth to migration_readonly;
+
 -- auth.users: column-level grant, (id, email) only. `id` is needed only
 -- to join staff_profiles.auth_user_id = auth.users.id (Postgres requires
 -- the column privilege even when a joined column never appears in the
