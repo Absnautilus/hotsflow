@@ -12,13 +12,24 @@
 -- Two independent layers of read-only enforcement, deliberately not just
 -- one:
 --   1. Grants: SELECT only, on exactly the 7 tables the migration reads
---      row data from, plus two columns (id, email) of auth.users --
---      nothing else, no INSERT/UPDATE/DELETE anywhere, ever.
+--      row data from -- nothing else, no INSERT/UPDATE/DELETE anywhere,
+--      ever.
 --   2. Role-level session default: every session that logs in as this
 --      role gets default_transaction_read_only = on automatically, so
 --      even a role mis-grant can't produce a write -- Postgres itself
 --      rejects any DML at the engine level before privileges are even
 --      checked.
+--
+-- This role never receives any privilege on the auth schema -- staff
+-- email is read via public.migration_readonly_auth_lookup instead (see
+-- create_migration_auth_lookup.sql, which must be run AFTER this script
+-- since it grants SELECT on the view to this role and the role must
+-- already exist). PRE-FLIGHT #14 found that granting USAGE on schema
+-- auth to a role does not take effect on the real legacy project (the
+-- schema is owned by supabase_admin, not the admin role that runs this
+-- script) -- rather than continue changing ACLs on Supabase's internal
+-- schema, the view moves the boundary into public, where this role's
+-- access is fully our own to grant and audit.
 --
 -- Deliberately NOT a `do $$ ... $$` block for the password-setting logic:
 -- psql's `:'var'` substitution does not happen inside dollar-quoted
@@ -44,23 +55,6 @@ alter role migration_readonly set default_transaction_read_only = on;
 grant select on
   hotels, staff_profiles, rooms, stays, request_categories, request_types, guest_requests
 to migration_readonly;
-
--- Schema-level USAGE is required before any table/column grant inside a
--- non-default schema has any effect at all -- caught by the E2E test's
--- first real run (VALIDATION failed with "permission denied for schema
--- auth" even though the column grant below was already correct).
-grant usage on schema auth to migration_readonly;
-
--- auth.users: column-level grant, (id, email) only. `id` is needed only
--- to join staff_profiles.auth_user_id = auth.users.id (Postgres requires
--- the column privilege even when a joined column never appears in the
--- final SELECT list); `email` is the only auth.users value the Auth
--- migration phase actually needs -- passwords are never carried over
--- from legacy (a fresh, deterministic value is generated at creation
--- time instead, same approach already validated in the rehearsal). No
--- other auth.users column (encrypted_password, phone,
--- raw_user_meta_data, confirmed_at, ...) is ever granted or read.
-grant select (id, email) on auth.users to migration_readonly;
 
 \echo '--- verification: role must have zero write privileges on any migrated table ---'
 select

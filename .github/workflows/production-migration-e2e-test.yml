@@ -48,6 +48,17 @@ name: Production migration mechanism — E2E test (disposable only, no real syst
 # below that need to compare against it -- both of which read the value
 # back at runtime via a database query into a shell variable, never via
 # a `${{ }}` expression, so the resolved value itself is never echoed.
+#
+# PRE-FLIGHT #14 redesign: migration_readonly no longer receives any
+# grant on the auth schema at all (found, on the real legacy project, not
+# to take effect -- that schema is owned by supabase_admin). Each job now
+# runs scripts/production/create_migration_auth_lookup.sql on legacy-sim
+# right after creating the role, mirroring the real setup order exactly
+# -- the view must be created after the role exists, since it grants
+# SELECT on itself to migration_readonly. 02_export_legacy.sql reads
+# staff email through this view, never through auth.users directly, so
+# this step is required for the orchestrator run further down to
+# succeed, not just cosmetic.
 on:
   workflow_dispatch:
 
@@ -90,6 +101,13 @@ jobs:
           psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
             -v role_password="e2e-test-readonly-pw" \
             -f scripts/production/setup_readonly_role.sql
+
+      - name: Create migration_readonly_auth_lookup view on legacy-sim (PRE-FLIGHT #14 redesign)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -f scripts/production/create_migration_auth_lookup.sql
 
       - name: Active read-only enforcement test (must be REJECTED)
         run: |
@@ -196,6 +214,13 @@ jobs:
           psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
             -v role_password="e2e-test-readonly-pw" \
             -f scripts/production/setup_readonly_role.sql
+
+      - name: Create migration_readonly_auth_lookup view on legacy-sim (PRE-FLIGHT #14 redesign)
+        env:
+          PGPASSWORD: legacysimadminpw
+        run: |
+          psql "postgresql://postgres@localhost:5433/postgres" -v ON_ERROR_STOP=1 \
+            -f scripts/production/create_migration_auth_lookup.sql
 
       - uses: supabase/setup-cli@v1
         with:

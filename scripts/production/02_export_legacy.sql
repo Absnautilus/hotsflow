@@ -13,17 +13,23 @@
 -- id translation is needed anywhere in this export -- values carry
 -- straight through unchanged.
 --
--- auth.users is touched only via the (id, email) column-level grant
--- (see setup_readonly_role.sql) -- id only to join, email is the only
--- value actually read.
+-- The staff email comes from public.migration_readonly_auth_lookup, NOT
+-- from auth.users directly (see create_migration_auth_lookup.sql).
+-- migration_readonly holds no privilege on the auth schema at all --
+-- PRE-FLIGHT #14 found that granting USAGE on schema auth to a role does
+-- not take effect on the real legacy project (schema owned by
+-- supabase_admin), so the join now goes through a narrow view in public,
+-- owned by the admin role, exposing only (staff_profile_id,
+-- auth_user_id, email) for staff with a linked auth.users row -- never
+-- password/hash/metadata, never the full auth.users table.
 \set ON_ERROR_STOP on
 
 select 'insert into legacy_source.staff_profiles (id, hotel_id, email, name, role, department, active, login_username) values (' ||
-  quote_literal(sp.id) || ',' || quote_literal(sp.hotel_id) || ',' || quote_nullable(au.email) || ',' ||
+  quote_literal(sp.id) || ',' || quote_literal(sp.hotel_id) || ',' || quote_nullable(mal.email) || ',' ||
   quote_literal(sp.name) || ',' || quote_literal(sp.role::text) || ',' || quote_nullable(sp.department::text) || ',' ||
   sp.active::text || ',' || quote_nullable(sp.login_username) || ') on conflict (id) do nothing;'
 from staff_profiles sp
-join auth.users au on au.id = sp.auth_user_id
+join public.migration_readonly_auth_lookup mal on mal.staff_profile_id = sp.id
 where sp.hotel_id = :'legacy_hotel_id';
 
 select 'insert into legacy_source.rooms (id, hotel_id, room_number, active) values (' ||
