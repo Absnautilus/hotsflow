@@ -40,15 +40,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== 0. Frozen artifact integrity: 10_migrate_hotel.sql / 20_reconciliation.sql unchanged since 2347f68 ==="
+echo "=== 0. Frozen artifact integrity: 10_migrate_hotel.sql / 20_reconciliation.sql unchanged since aed67fc ==="
 cd "$REPO_ROOT"
-FROZEN_DIFF="$(git diff 2347f68 HEAD -- scripts/dry-run/10_migrate_hotel.sql scripts/dry-run/20_reconciliation.sql)"
+FROZEN_BASELINE="aed67fc5b0ce93ba123fd12bcb3bbb707092f6d7"
+FROZEN_DIFF="$(git diff "$FROZEN_BASELINE" HEAD -- scripts/dry-run/10_migrate_hotel.sql scripts/dry-run/20_reconciliation.sql)"
 if [ -n "$FROZEN_DIFF" ]; then
-  echo "!!! ABORT: frozen migration/reconciliation script(s) differ from the validated commit 2347f68."
-  echo "!!! Refusing to run against a script that was never rehearsed."
+  echo "!!! ABORT: frozen migration/reconciliation script(s) differ from the validated cutover baseline $FROZEN_BASELINE."
+  echo "!!! Refusing to run against a script that was never reviewed."
   exit 1
 fi
-echo "Frozen scripts confirmed byte-identical to 2347f68."
+echo "Frozen scripts confirmed byte-identical to cutover baseline $FROZEN_BASELINE."
 
 echo "=== 1. Hard gate: refuse to run if this hotel is already migrated ==="
 ALREADY_MIGRATED="$(psql "$TARGET_DB_URL" -tAc "select count(*) from hotels where id = '$LEGACY_HOTEL_ID'")"
