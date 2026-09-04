@@ -4,17 +4,19 @@
 # reuses one Hotsflow Auth user per pair, and populates the permanent
 # `auth_remap` table 10_migrate_hotel.sql depends on.
 #
-# Existing target Auth identities are reused only when the staged email has
-# exactly one case-insensitive match in auth.users. Existing users are never
-# modified or deleted. Zero matches means create a new Auth user; more than
-# one match is treated as an ambiguity and fails closed.
+# An existing target Auth identity is reused only when the staged email has
+# exactly one case-insensitive match in auth.users AND that identity is already
+# an established Hotsflow identity (profile + at least one membership). This is
+# the production case discovered during cutover. A bare/orphan Auth collision
+# is not silently adopted: creation is attempted and fails through the normal,
+# sanitized Admin API diagnostic path.
+#
+# Existing users are never modified or deleted. Zero matches means create a
+# new Auth user; more than one match is treated as ambiguity and fails closed.
 #
 # Passwords are never carried over from legacy (never read, never available
 # to this script). A fresh deterministic value is generated only for genuinely
 # new Auth users. Staff must reset it after migration.
-#
-# On a failed creation, prints only the sanitized diagnostic implemented in
-# lib.sh. Never prints email/password/service-role key or a raw API body.
 #
 # Usage: DB_URL=... API_URL=... SERVICE_ROLE_KEY=... \
 #   05_auth_migrate.sh <staff_csv_path>
@@ -59,9 +61,8 @@ cleanup_on_failure() {
         delete_auth_user "$id"
       done
     fi
-    # Clear mappings even when every mapped identity was reused and no new
-    # Auth user had yet been created. A failed Auth phase must leave no
-    # auth_remap residue from the attempted run.
+    # A failed Auth phase must leave no mappings from the attempted run,
+    # including mappings that pointed to pre-existing identities.
     psql "$DB_URL" -v ON_ERROR_STOP=1 -c "truncate auth_remap;" >/dev/null
     echo "=== Auth rollback complete: auth_remap cleared; pre-existing Auth users untouched ==="
   fi
@@ -77,15 +78,21 @@ while IFS=, read -r legacy_id email; do
   if [ "$existing_count" = "1" ]; then
     existing_id="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tAc \
       "select id from auth.users where lower(email) = lower(:'email') limit 1;")"
-    psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
-      "insert into auth_remap (legacy_auth_user_id, new_auth_user_id) values ('$legacy_id','$existing_id') on conflict (legacy_auth_user_id) do update set new_auth_user_id = excluded.new_auth_user_id;" >/dev/null
-    MAPPED=$((MAPPED + 1))
-    REUSED=$((REUSED + 1))
-    echo ">>> auth_identity_reuse: PASS (exact existing target Auth identity reused; PII withheld)"
-    continue
-  fi
+    established_identity="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v auth_id="$existing_id" -tAc \
+      "select (exists(select 1 from public.profiles p where p.id = :'auth_id'::uuid) and exists(select 1 from public.memberships m where m.profile_id = :'auth_id'::uuid))::int;")"
 
-  if [ "$existing_count" != "0" ]; then
+    if [ "$established_identity" = "1" ]; then
+      psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
+        "insert into auth_remap (legacy_auth_user_id, new_auth_user_id) values ('$legacy_id','$existing_id') on conflict (legacy_auth_user_id) do update set new_auth_user_id = excluded.new_auth_user_id;" >/dev/null
+      MAPPED=$((MAPPED + 1))
+      REUSED=$((REUSED + 1))
+      echo ">>> auth_identity_reuse: PASS (established existing Hotsflow identity reused; PII withheld)"
+      continue
+    fi
+    # A bare Auth collision is deliberately not adopted. Fall through to the
+    # Admin API create path so the existing sanitized email_exists diagnostic
+    # remains the failure mode and the E2E collision test remains meaningful.
+  elif [ "$existing_count" != "0" ]; then
     echo "!!! Auth identity lookup ambiguous for legacy_id=$legacy_id (email withheld from log; exact-email matches=$existing_count)"
     FAILED=1
     break
@@ -112,4 +119,4 @@ if [ "$FAILED" = "1" ]; then
   exit 1
 fi
 
-echo ">>> auth_migration: PASS ($MAPPED staff mapped; $REUSED existing Auth identities reused)"
+echo ">>> auth_migration: PASS ($MAPPED staff mapped; $REUSED established existing Auth identities reused)"
