@@ -72,14 +72,26 @@ trap cleanup_on_failure EXIT
 while IFS=, read -r legacy_id email; do
   [ -z "$legacy_id" ] && continue
 
-  existing_count="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tAc \
-    "select count(*) from auth.users where lower(email) = lower(:'email');")"
+  # psql does not perform :variable interpolation inside SQL passed via -c.
+  # Feed static SQL on stdin instead, while still binding values with -v so
+  # email/IDs are quoted by psql rather than interpolated by the shell.
+  existing_count="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tA <<'SQL'
+select count(*) from auth.users where lower(email) = lower(:'email');
+SQL
+)"
 
   if [ "$existing_count" = "1" ]; then
-    existing_id="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tAc \
-      "select id from auth.users where lower(email) = lower(:'email') limit 1;")"
-    established_identity="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v auth_id="$existing_id" -tAc \
-      "select (exists(select 1 from public.profiles p where p.id = :'auth_id'::uuid) and exists(select 1 from public.memberships m where m.profile_id = :'auth_id'::uuid))::int;")"
+    existing_id="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v email="$email" -tA <<'SQL'
+select id from auth.users where lower(email) = lower(:'email') limit 1;
+SQL
+)"
+    established_identity="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -v auth_id="$existing_id" -tA <<'SQL'
+select (
+  exists(select 1 from public.profiles p where p.id = :'auth_id'::uuid)
+  and exists(select 1 from public.memberships m where m.profile_id = :'auth_id'::uuid)
+)::int;
+SQL
+)"
 
     if [ "$established_identity" = "1" ]; then
       psql "$DB_URL" -v ON_ERROR_STOP=1 -c \
