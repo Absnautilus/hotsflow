@@ -5,11 +5,13 @@
 -- populated beforehand by whichever seed script matches the run (synthetic
 -- for the dry-run, real-anonymized for the rehearsal). Single transaction
 -- (plan §I.1); idempotent via explicit id preservation + ON CONFLICT DO
--- NOTHING.
+-- NOTHING, except when an Auth identity already has a target module-local
+-- staff_profile: in that case the existing target staff_profile id is reused
+-- and legacy staff FK references are remapped to it.
 --
 -- Requires:
 --   -v hotel_id=<uuid> -v hotel_name='<text>' -v hotel_slug='<text>'
--- and a temporary table `auth_remap(legacy_auth_user_id uuid primary key,
+-- and a temporary/permanent table `auth_remap(legacy_auth_user_id uuid primary key,
 -- new_auth_user_id uuid not null)` already created and populated by the
 -- orchestrator's Auth phase (plan §B.1.2 remapping — no explicit id
 -- requested from GoTrue) BEFORE this script runs. Data-driven (loops over
@@ -94,11 +96,50 @@ join auth_remap ar on ar.legacy_auth_user_id = ls.id
 where ls.hotel_id = :'hotel_id' and ls.role = 'master'
 on conflict (profile_id, organization_id) where organization_id is not null do nothing;
 
--- STEP 5 — staff_profiles itself (module-local, id preserved from source).
-insert into staff_profiles (id, hotel_id, auth_user_id, name, role, department, active, login_username)
-select ls.id, ls.hotel_id, ar.new_auth_user_id, ls.name, ls.role::staff_role, ls.department::department, ls.active, ls.login_username
+-- STEP 5 — staff_profiles itself (module-local).
+-- Normally the legacy staff id is preserved. If an Auth identity already has
+-- a target staff_profile (for example an established Hotsflow/demo identity),
+-- reuse that row instead of violating staff_profiles.auth_user_id uniqueness.
+-- Keep a transaction-local legacy->target staff id map so downstream staff FKs
+-- are rewritten consistently.
+create temp table staff_profile_remap (
+  legacy_staff_profile_id uuid primary key,
+  target_staff_profile_id uuid not null unique
+) on commit drop;
+
+insert into staff_profile_remap (legacy_staff_profile_id, target_staff_profile_id)
+select
+  ls.id,
+  coalesce(existing_sp.id, ls.id)
 from legacy_source.staff_profiles ls
 join auth_remap ar on ar.legacy_auth_user_id = ls.id
+left join staff_profiles existing_sp on existing_sp.auth_user_id = ar.new_auth_user_id
+where ls.hotel_id = :'hotel_id';
+
+-- Re-home an already-existing module-local staff_profile onto the real hotel
+-- and synchronize its legacy module-local fields. Its target id is preserved
+-- because other target-side references may already point to it.
+update staff_profiles sp
+set
+  hotel_id = ls.hotel_id,
+  name = ls.name,
+  role = ls.role::staff_role,
+  department = ls.department::department,
+  active = ls.active,
+  login_username = ls.login_username
+from legacy_source.staff_profiles ls
+join staff_profile_remap sr on sr.legacy_staff_profile_id = ls.id
+where sp.id = sr.target_staff_profile_id
+  and sr.target_staff_profile_id <> sr.legacy_staff_profile_id
+  and ls.hotel_id = :'hotel_id';
+
+-- New identities still preserve the legacy staff id exactly.
+insert into staff_profiles (id, hotel_id, auth_user_id, name, role, department, active, login_username)
+select sr.target_staff_profile_id, ls.hotel_id, ar.new_auth_user_id, ls.name, ls.role::staff_role,
+       ls.department::department, ls.active, ls.login_username
+from legacy_source.staff_profiles ls
+join auth_remap ar on ar.legacy_auth_user_id = ls.id
+join staff_profile_remap sr on sr.legacy_staff_profile_id = ls.id
 where ls.hotel_id = :'hotel_id'
 on conflict (id) do nothing;
 
@@ -121,17 +162,25 @@ insert into request_types (id, category_id, name, description, allows_quantity, 
 
 -- STEP 7 — stays: active only (plan §E).
 insert into stays (id, hotel_id, room_id, guest_last_name, check_in_at, check_out_at, status, source, external_stay_id, created_by)
-  select id, hotel_id, room_id, guest_last_name, check_in_at, check_out_at, status::stay_status,
-    coalesce(source, 'manual')::stay_source, external_stay_id, created_by
-  from legacy_source.stays where hotel_id = :'hotel_id' and status = 'active'
+  select s.id, s.hotel_id, s.room_id, s.guest_last_name, s.check_in_at, s.check_out_at, s.status::stay_status,
+    coalesce(s.source, 'manual')::stay_source, s.external_stay_id,
+    coalesce(sr_created.target_staff_profile_id, s.created_by)
+  from legacy_source.stays s
+  left join staff_profile_remap sr_created on sr_created.legacy_staff_profile_id = s.created_by
+  where s.hotel_id = :'hotel_id' and s.status = 'active'
   on conflict (id) do nothing;
 
 -- STEP 8 — guest_requests: open only (plan §E).
 insert into guest_requests (id, hotel_id, stay_id, room_number, request_type_id, quantity, status, assigned_department, accepted_by, created_at, accepted_at, completed_at, priority, created_by_staff, archived_at, returned_at)
   select gr.id, gr.hotel_id, gr.stay_id, gr.room_number, gr.request_type_id, gr.quantity,
-    gr.status::request_status, gr.assigned_department::department, gr.accepted_by,
-    coalesce(gr.created_at, now()), gr.accepted_at, gr.completed_at, gr.priority, gr.created_by_staff, gr.archived_at, gr.returned_at
+    gr.status::request_status, gr.assigned_department::department,
+    coalesce(sr_accepted.target_staff_profile_id, gr.accepted_by),
+    coalesce(gr.created_at, now()), gr.accepted_at, gr.completed_at, gr.priority,
+    coalesce(sr_created.target_staff_profile_id, gr.created_by_staff),
+    gr.archived_at, gr.returned_at
   from legacy_source.guest_requests gr
+  left join staff_profile_remap sr_accepted on sr_accepted.legacy_staff_profile_id = gr.accepted_by
+  left join staff_profile_remap sr_created on sr_created.legacy_staff_profile_id = gr.created_by_staff
   where gr.hotel_id = :'hotel_id' and gr.status in ('requested','in_progress') and gr.archived_at is null
   on conflict (id) do nothing;
 
