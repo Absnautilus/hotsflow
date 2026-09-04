@@ -1,13 +1,24 @@
 -- One-off, non-destructive verification of the migration_readonly
 -- credential on the REAL legacy Housekeeping project. Metadata and
 -- privilege introspection only -- no row content is ever read except a
--- single count(*), which is a number, not PII. No write is attempted.
+-- handful of count(*)/array_agg(column_name) results, none of them PII.
+-- No write is attempted.
 --
--- Reuses the exact has_table_privilege()/has_column_privilege() pattern
--- already validated in setup_readonly_role.sql and the E2E mechanism --
--- just extended to full coverage (all 4 write privilege types, all 7
--- tables) since this is the one real check against the real credential,
--- not a repeated automated one.
+-- Rewritten for the PRE-FLIGHT #14 view-based redesign: the original
+-- version of this file checked has_column_privilege() on auth.users
+-- directly (id/email true, encrypted_password false) -- that assumed
+-- the old column-grant design. migration_readonly now holds NO
+-- privilege on the auth schema at all (see setup_readonly_role.sql /
+-- create_migration_auth_lookup.sql); this file no longer issues any
+-- query against auth.users, direct or otherwise. It instead verifies
+-- the replacement mechanism: schema-auth USAGE is absent, the lookup
+-- view exists with exactly the columns it should, grants on the view
+-- are scoped to migration_readonly only, the view is not
+-- security_invoker (so it can read auth.users as its owner without
+-- migration_readonly needing to), and -- the actual end-to-end proof --
+-- migration_readonly can resolve, for every real-hotel staff member,
+-- an expected lookup row with a non-null email, entirely through
+-- counts, never printing the email/name itself.
 \set ON_ERROR_STOP on
 
 \echo '--- 1. identity: which role is actually connected ---'
@@ -60,11 +71,41 @@ select
   has_table_privilege(current_user, 'public.guest_requests', 'DELETE') as guest_requests_delete,
   has_table_privilege(current_user, 'public.guest_requests', 'TRUNCATE') as guest_requests_truncate;
 
-\echo '--- 6. auth.users column-level privilege: id/email must be true, encrypted_password must be false ---'
-select
-  has_column_privilege(current_user, 'auth.users', 'id', 'SELECT') as id_select,
-  has_column_privilege(current_user, 'auth.users', 'email', 'SELECT') as email_select,
-  has_column_privilege(current_user, 'auth.users', 'encrypted_password', 'SELECT') as encrypted_password_select;
+\echo '--- 6. no privilege on the auth schema at all (must be false -- this is the replacement for the old auth.users column-privilege check) ---'
+select has_schema_privilege(current_user, 'auth', 'USAGE') as auth_schema_usage;
 
-\echo '--- 7. no superuser/admin-level privilege ---'
+\echo '--- 7. public.migration_readonly_auth_lookup exists (count expected = 1) ---'
+select count(*) as lookup_view_exists from pg_views where schemaname = 'public' and viewname = 'migration_readonly_auth_lookup';
+
+\echo '--- 8. the view exposes exactly these columns, in this order (column names only, not data) ---'
+select array_agg(column_name order by ordinal_position) as lookup_view_columns
+from information_schema.columns
+where table_schema = 'public' and table_name = 'migration_readonly_auth_lookup';
+-- must be exactly {staff_profile_id,auth_user_id,email}
+
+\echo '--- 9. grants on the view: migration_readonly SELECT only, nothing else (any PUBLIC row here would be a leak) ---'
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'migration_readonly_auth_lookup'
+order by grantee, privilege_type;
+-- must be exactly one row: migration_readonly / SELECT
+
+\echo '--- 10. the view is not security_invoker=true (it must run as its owner, not as migration_readonly, to read auth.users) ---'
+select coalesce(c.reloptions::text, '') not like '%security_invoker=true%' as security_invoker_not_true
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relname = 'migration_readonly_auth_lookup';
+
+\echo '--- 11. no superuser/admin-level privilege on this role ---'
 select rolsuper, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname = current_user;
+
+\echo '--- 12. end-to-end proof, as migration_readonly, with zero auth-schema privilege: every real-hotel staff member resolves to a lookup row with a non-null email (counts only, no email/name ever printed) ---'
+select
+  (select count(*) from staff_profiles where hotel_id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb') as staff_total,
+  (select count(*) from staff_profiles sp where sp.hotel_id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb'
+     and exists (select 1 from public.migration_readonly_auth_lookup mal where mal.staff_profile_id = sp.id and mal.email is not null)
+  ) as staff_with_lookup_email,
+  (select count(*) from staff_profiles sp where sp.hotel_id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb'
+     and not exists (select 1 from public.migration_readonly_auth_lookup mal where mal.staff_profile_id = sp.id and mal.email is not null)
+  ) as staff_missing_lookup_email;
+-- staff_with_lookup_email must equal staff_total; staff_missing_lookup_email must be 0
