@@ -4,16 +4,14 @@
 -- Job role: describes what the person does at a specific property and is
 -- deliberately configurable by that property's administrators.
 
--- 1. Rename the lowest Core access role. Keep the existing row/id so all
--- memberships and role_permissions remain intact.
-update roles
-set slug = 'staff', display_name = 'Staff'
-where slug = 'receptionist';
-
--- Converge safely if a fresh environment already uses the new slug.
+-- 1. Rename the lowest Core role at the product/UI level without changing
+-- its internal slug yet. Several shipped compatibility migrations and pgTAP
+-- fixtures still reference `receptionist`, so changing the slug here would
+-- break replay. The stable semantic label exposed to users is now `Staff`;
+-- the internal slug can be migrated later once compatibility code is removed.
 update roles
 set display_name = 'Staff', scope = 'property', is_system = true, rank = 10
-where slug = 'staff';
+where slug = 'receptionist';
 
 -- 2. Property-configurable job roles. These are NOT authorization roles.
 create table property_job_roles (
