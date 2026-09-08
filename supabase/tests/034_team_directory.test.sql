@@ -79,8 +79,8 @@ select throws_ok(
 select throws_ok(
   $$ update property_staff_details set property_id = '00000034-0000-0000-0000-000000000012'
      where profile_id = '00000034-0000-0000-0000-000000000042' $$,
-  '23514', 'profile_not_member_of_property',
-  'property_id cannot be moved to another property'
+  '42501', null,
+  'property_id is protected by the exact column-level update grant'
 );
 
 reset role;
