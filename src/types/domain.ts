@@ -30,6 +30,49 @@ export interface Profile {
   avatarUrl: string | null
 }
 
+export interface CoreRole {
+  id: string
+  slug: string
+  displayName: string
+  scope: RoleScope
+  rank: number
+}
+
+export interface JobTitle {
+  id: string
+  propertyId: string
+  name: string
+  active: boolean
+}
+
+export type EmploymentStatus = 'active' | 'inactive'
+
+export interface TeamMember {
+  profile: Profile
+  membership: Membership
+  role: CoreRole
+  jobTitle: JobTitle | null
+  employmentStatus: EmploymentStatus
+}
+
+export interface InviteTeamMemberInput {
+  propertyId: string
+  fullName: string
+  email: string
+  roleId: string
+  jobTitleId?: string | null
+}
+
+export interface UpdateTeamMemberInput {
+  membershipId: string
+  profileId: string
+  propertyId: string
+  roleId?: string
+  membershipStatus?: MembershipStatus
+  jobTitleId?: string | null
+  employmentStatus?: EmploymentStatus
+}
+
 export interface Membership {
   id: string
   profileId: string

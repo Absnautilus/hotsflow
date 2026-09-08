@@ -168,6 +168,7 @@ export interface Database {
           slug: string
           display_name: string
           scope: string
+          rank: number
           is_system: boolean
           created_at: string
         }
@@ -176,6 +177,7 @@ export interface Database {
           slug: string
           display_name: string
           scope: string
+          rank?: number
           is_system?: boolean
           created_at?: string
         }
@@ -184,6 +186,7 @@ export interface Database {
           slug?: string
           display_name?: string
           scope?: string
+          rank?: number
           is_system?: boolean
           created_at?: string
         }
@@ -337,6 +340,56 @@ export interface Database {
           },
         ]
       }
+      property_job_titles: {
+        Row: {
+          id: string
+          property_id: string
+          name: string
+          active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          property_id: string
+          name: string
+          active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          active?: boolean
+        }
+        Relationships: []
+      }
+      property_staff_details: {
+        Row: {
+          property_id: string
+          profile_id: string
+          job_title_id: string | null
+          employment_status: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          property_id: string
+          profile_id: string
+          job_title_id?: string | null
+          employment_status?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          job_title_id?: string | null
+          employment_status?: string
+        }
+        Relationships: []
+      }
       guest_sessions: {
         Row: {
           id: string
@@ -424,6 +477,19 @@ export interface Database {
       }
       has_module: {
         Args: { p_property_id: string; p_module_slug: string }
+        Returns: boolean
+      }
+      assign_membership_role: {
+        Args: { p_membership_id: string; p_new_role_id: string }
+        Returns: Database['public']['Tables']['memberships']['Row']
+      }
+      role_assignment_allowed: {
+        Args: {
+          p_new_role_id: string
+          p_property_id: string | null
+          p_organization_id: string | null
+          p_target_profile_id: string
+        }
         Returns: boolean
       }
       guest_session_is_valid: {
