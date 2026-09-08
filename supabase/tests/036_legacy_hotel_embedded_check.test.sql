@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap;
-select plan(3);
+select plan(4);
 
 insert into organizations (id, name, slug) values
   ('00000036-0000-0000-0000-000000000001', 'Embedded Check Org', 'test-036-org');
@@ -29,6 +29,14 @@ select ok(
 select ok(
   not legacy_hotel_is_embedded('00000036-0000-0000-0000-000000099999'::uuid),
   'an unknown hotel id is reported as not embedded, not an error'
+);
+
+reset role;
+set local role anon;
+select throws_ok(
+  $$ select legacy_hotel_is_embedded('00000036-0000-0000-0000-000000000021') $$,
+  '42501', null,
+  'anonymous callers cannot probe the legacy mapping'
 );
 
 reset role;

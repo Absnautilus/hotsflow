@@ -122,8 +122,9 @@ export async function createJobTitle(client: SupabaseClient<Database>, propertyI
 }
 
 export async function updateJobTitle(client: SupabaseClient<Database>, id: string, changes: { name?: string; active?: boolean }): Promise<void> {
-  const { error } = await client.from('property_job_titles').update(changes).eq('id', id)
+  const { data, error } = await client.from('property_job_titles').update(changes).eq('id', id).select('id').maybeSingle()
   if (error) throw error
+  if (!data) throw new Error('job_title_update_not_applied')
 }
 
 export async function inviteTeamMember(client: SupabaseClient<Database>, input: InviteTeamMemberInput): Promise<void> {
@@ -133,16 +134,22 @@ export async function inviteTeamMember(client: SupabaseClient<Database>, input: 
 
 export async function updateTeamMember(client: SupabaseClient<Database>, input: UpdateTeamMemberInput): Promise<void> {
   if (input.roleId) {
-    const { error } = await client.rpc('assign_membership_role', {
+    const { data, error } = await client.rpc('assign_membership_role', {
       p_membership_id: input.membershipId,
       p_new_role_id: input.roleId,
     })
     if (error) throw error
+    if (!data) throw new Error('membership_role_update_not_applied')
   }
 
   if (input.membershipStatus) {
-    const { error } = await client.from('memberships').update({ status: input.membershipStatus }).eq('id', input.membershipId)
+    const { data, error } = await client.from('memberships')
+      .update({ status: input.membershipStatus })
+      .eq('id', input.membershipId)
+      .select('id')
+      .maybeSingle()
     if (error) throw error
+    if (!data) throw new Error('membership_status_update_not_applied')
   }
 
   if (input.jobTitleId !== undefined || input.employmentStatus !== undefined) {
@@ -160,11 +167,13 @@ export async function updateTeamMember(client: SupabaseClient<Database>, input: 
     const result = existing.data
       ? await client.from('property_staff_details').update(changes)
         .eq('property_id', input.propertyId).eq('profile_id', input.profileId)
+        .select('profile_id').maybeSingle()
       : await client.from('property_staff_details').insert({
         property_id: input.propertyId,
         profile_id: input.profileId,
         ...changes,
-      })
+      }).select('profile_id').maybeSingle()
     if (result.error) throw result.error
+    if (!result.data) throw new Error('staff_details_update_not_applied')
   }
 }
