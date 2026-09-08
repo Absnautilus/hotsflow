@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap;
-select plan(13);
+select plan(17);
 
 insert into organizations (id, name, slug) values
   ('00000034-0000-0000-0000-000000000001', 'Team Org A', 'test-034-org-a'),
@@ -34,6 +34,22 @@ select ok(
   (select relrowsecurity from pg_class where oid = 'property_staff_details'::regclass),
   'property_staff_details has RLS enabled'
 );
+select ok(
+  not has_table_privilege('authenticated', 'property_job_titles', 'TRUNCATE'),
+  'authenticated cannot truncate property job titles'
+);
+select ok(
+  not has_table_privilege('authenticated', 'property_staff_details', 'TRUNCATE'),
+  'authenticated cannot truncate property staff details'
+);
+select ok(
+  not has_table_privilege('anon', 'property_job_titles', 'TRUNCATE'),
+  'anonymous users cannot truncate property job titles'
+);
+select ok(
+  not has_table_privilege('anon', 'property_staff_details', 'TRUNCATE'),
+  'anonymous users cannot truncate property staff details'
+);
 
 set local role authenticated;
 set local request.jwt.claim.sub = '00000034-0000-0000-0000-000000000041';
@@ -63,8 +79,8 @@ select throws_ok(
 select throws_ok(
   $$ update property_staff_details set property_id = '00000034-0000-0000-0000-000000000012'
      where profile_id = '00000034-0000-0000-0000-000000000042' $$,
-  '23514', 'profile_not_member_of_property',
-  'property_id cannot be moved to another property'
+  '42501', null,
+  'property_id is protected by the exact column-level update grant'
 );
 
 reset role;
