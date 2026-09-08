@@ -188,3 +188,16 @@ queried on their own.
 `status = 'invited'` plus the hierarchy-gated `INSERT` policy covers what's
 actually required so far. Add when a real module migration needs more
 (e.g. an email-based invite flow with its own token).
+## Team: access and operational job stay separate
+
+`profiles` remains the authenticated identity and `memberships` remains the
+only source of software access. Team adds two property-scoped tables:
+
+- `property_job_titles`: hotel-owned operational labels such as Reception or
+  Governante. They are not RBAC roles and grant no permissions.
+- `property_staff_details`: the job title and employment status of one profile
+  in one property. The `(property_id, profile_id)` key allows an org-wide user
+  to have different operational details at different hotels.
+
+Neither table can create or extend a membership. Their RLS only exposes the
+current property and reserves writes for `core.staff.manage`.

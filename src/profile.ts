@@ -24,3 +24,17 @@ export async function getCurrentProfile(client: SupabaseClient<Database>): Promi
   if (error) throw error
   return data ? mapProfileRow(data) : null
 }
+
+export async function updateCurrentProfile(
+  client: SupabaseClient<Database>,
+  changes: { fullName: string; avatarUrl?: string | null },
+): Promise<Profile> {
+  const { data: userData } = await client.auth.getUser()
+  if (!userData.user) throw new Error('not_authenticated')
+  const { data, error } = await client.from('profiles').update({
+    full_name: changes.fullName.trim(),
+    ...(changes.avatarUrl !== undefined ? { avatar_url: changes.avatarUrl } : {}),
+  }).eq('id', userData.user.id).select('*').single()
+  if (error) throw error
+  return mapProfileRow(data)
+}

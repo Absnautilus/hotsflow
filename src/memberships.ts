@@ -14,6 +14,19 @@ function mapPropertyRow(row: Database['public']['Tables']['properties']['Row']):
   }
 }
 
+export async function updateProperty(
+  client: SupabaseClient<Database>,
+  propertyId: string,
+  changes: { name: string; timezone: string },
+): Promise<Property> {
+  const { data, error } = await client.from('properties').update({
+    name: changes.name.trim(),
+    timezone: changes.timezone,
+  }).eq('id', propertyId).select('*').single()
+  if (error) throw error
+  return mapPropertyRow(data)
+}
+
 function mapMembershipRow(row: Database['public']['Tables']['memberships']['Row']): Membership {
   return {
     id: row.id,
