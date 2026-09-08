@@ -5,6 +5,27 @@ name: Deploy migrations to shared Supabase project
 # Decision 4) — to the real hosted project. Never triggers automatically on
 # push. `mode: check` is read-only (safe to run anytime); `mode: apply`
 # requires typing the target project ref as an extra confirmation gate.
+#
+# migration_scope controls how out-of-order local migrations are handled.
+# `standard` (default) is a plain `supabase migration up`, which the CLI
+# itself refuses whenever a local migration's timestamp is older than the
+# latest migration already recorded on the remote history table -- exactly
+# what happened with 20260905134500_guest_requests_hotels_org_isolation.sql
+# after 20260906072119/20260908112932/20260908114016 were reconciled to
+# their real (later) production timestamps. `include-all` opts into
+# applying those out-of-order migrations too, but only when every one of
+# these holds: mode is apply, migration_scope is include-all,
+# confirm_project_ref matches the configured project, AND
+# confirm_out_of_order_version is typed exactly as the one out-of-order
+# migration this gate currently allows (20260905134500). Before applying
+# anything under include-all, a `supabase db push --dry-run` step prints
+# what would run; `supabase migration up` itself has no dry-run flag, so
+# this preview intentionally uses `db push` for that one read-only step
+# while the actual apply below stays on `migration up`, matching the
+# command the CLI's own error message named. A separate gate re-reads the
+# pending set from the remote database right before any apply and refuses
+# to proceed unless it is exactly the three approved migrations -- no
+# fourth, unexpected file can ever be picked up by an apply run.
 on:
   workflow_dispatch:
     inputs:
@@ -16,6 +37,17 @@ on:
           - check
           - apply
         default: check
+      migration_scope:
+        description: "standard = ordinary `migration up` (refuses out-of-order migrations); include-all = also apply the one currently-approved out-of-order migration (requires confirm_out_of_order_version below). Ignored when mode is check."
+        required: true
+        type: choice
+        options:
+          - standard
+          - include-all
+        default: standard
+      confirm_out_of_order_version:
+        description: "Only checked when migration_scope is include-all: type the exact out-of-order migration version being applied (must be 20260905134500). Any value is accepted for mode=check or migration_scope=standard."
+        required: true
       confirm_project_ref:
         description: "Type the target Supabase project ref to confirm (must match the SUPABASE_PROJECT_REF repo variable exactly)"
         required: true
@@ -32,6 +64,15 @@ jobs:
           fi
           echo "Target project ref confirmed: ${{ vars.SUPABASE_PROJECT_REF }}"
 
+      - name: Verify out-of-order confirmation (include-all only)
+        if: inputs.mode == 'apply' && inputs.migration_scope == 'include-all'
+        run: |
+          if [ "${{ inputs.confirm_out_of_order_version }}" != "20260905134500" ]; then
+            echo "::error::confirm_out_of_order_version ('${{ inputs.confirm_out_of_order_version }}') must be exactly 20260905134500 to apply with migration_scope=include-all — refusing to proceed."
+            exit 1
+          fi
+          echo "Out-of-order confirmation matched: 20260905134500"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -43,13 +84,44 @@ jobs:
       - name: Migration status (read-only, always runs)
         env:
           SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
-        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+        run: supabase migration list --db-url "$SUPABASE_DB_URL" | tee migration_list_before.txt
 
-      - name: Apply pending migrations
+      - name: Verify pending migration set matches the three approved migrations exactly
         if: inputs.mode == 'apply'
+        run: |
+          pending=$(grep '`' migration_list_before.txt | while IFS='|' read -r local_col remote_col _rest; do
+            local_val=$(echo "$local_col" | tr -d '`' | xargs)
+            remote_val=$(echo "$remote_col" | tr -d '`' | xargs)
+            if [ -n "$local_val" ] && [ -z "$remote_val" ]; then
+              echo "$local_val"
+            fi
+          done | sort)
+          expected=$(printf '%s\n' 20260905134500 20260908150000 20260908150500 | sort)
+          echo "Pending (local-only) migrations:"
+          echo "$pending"
+          if [ "$pending" != "$expected" ]; then
+            echo "::error::Pending migration set does not match exactly the three approved migrations (20260905134500, 20260908150000, 20260908150500) — refusing to apply anything."
+            exit 1
+          fi
+          echo "Pending set confirmed: exactly the three approved migrations."
+
+      - name: Preview include-all apply (dry run, no changes made)
+        if: inputs.mode == 'apply' && inputs.migration_scope == 'include-all'
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all --dry-run
+
+      - name: Apply pending migrations (standard)
+        if: inputs.mode == 'apply' && inputs.migration_scope == 'standard'
         env:
           SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
         run: supabase migration up --db-url "$SUPABASE_DB_URL"
+
+      - name: Apply pending migrations (include-all)
+        if: inputs.mode == 'apply' && inputs.migration_scope == 'include-all'
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration up --db-url "$SUPABASE_DB_URL" --include-all
 
       - name: Migration status after apply
         if: inputs.mode == 'apply'
