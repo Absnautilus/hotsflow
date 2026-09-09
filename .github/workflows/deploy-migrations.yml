@@ -24,8 +24,8 @@ name: Deploy migrations to shared Supabase project
 # while the actual apply below stays on `migration up`, matching the
 # command the CLI's own error message named. A separate gate re-reads the
 # pending set from the remote database right before any apply and refuses
-# to proceed unless it is exactly the three approved migrations -- no
-# fourth, unexpected file can ever be picked up by an apply run.
+# to proceed unless it is exactly the migration approved for this release
+# -- no unexpected file can ever be picked up by an apply run.
 on:
   workflow_dispatch:
     inputs:
@@ -86,7 +86,7 @@ jobs:
           SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
         run: supabase migration list --db-url "$SUPABASE_DB_URL" | tee migration_list_before.txt
 
-      - name: Verify pending migration set matches the three approved migrations exactly
+      - name: Verify pending migration set matches the approved migration exactly
         if: inputs.mode == 'apply'
         run: |
           pending=$(grep '`' migration_list_before.txt | while IFS='|' read -r local_col remote_col _rest; do
@@ -96,14 +96,14 @@ jobs:
               echo "$local_val"
             fi
           done | sort)
-          expected=$(printf '%s\n' 20260905134500 20260908150000 20260908150500 | sort)
+          expected=20260909110434
           echo "Pending (local-only) migrations:"
           echo "$pending"
           if [ "$pending" != "$expected" ]; then
-            echo "::error::Pending migration set does not match exactly the three approved migrations (20260905134500, 20260908150000, 20260908150500) — refusing to apply anything."
+            echo "::error::Pending migration set does not match exactly the approved migration (20260909110434) — refusing to apply anything."
             exit 1
           fi
-          echo "Pending set confirmed: exactly the three approved migrations."
+          echo "Pending set confirmed: exactly the approved migration 20260909110434."
 
       - name: Preview include-all apply (dry run, no changes made)
         if: inputs.mode == 'apply' && inputs.migration_scope == 'include-all'
