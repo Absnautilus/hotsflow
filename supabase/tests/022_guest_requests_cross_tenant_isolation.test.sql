@@ -104,9 +104,9 @@ set local request.jwt.claim.sub = '00000022-0000-0000-0000-000000000a01';
 select throws_ok(
   $$ insert into guest_requests (hotel_id, room_number, request_type_id, quantity, assigned_department, status)
      values ('00000022-0000-0000-0000-00000000ff02', '201', '00000022-0000-0000-0000-0000000fee02', 1, 'housekeeping', 'requested') $$,
-  '42501',
-  null,
-  'staff @ H1: INSERT of a row explicitly targeting H2 is denied at the WITH CHECK / grant level'
+  '23514',
+  'guest_request_room_hotel_mismatch',
+  'staff @ H1: INSERT of a row explicitly targeting H2 is rejected by relational tenant integrity before RLS'
 );
 
 select is(
