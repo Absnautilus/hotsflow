@@ -1,0 +1,77 @@
+name: Reconcile migration history (20260909110434 vs 20260909120053)
+
+# One-time reconciliation, manual only. An out-of-band apply against
+# production (run directly, outside this repo's deploy-migrations.yml gate)
+# executed the exact SQL of
+# 20260909110434_enforce_guest_requests_hotel_integrity.sql, but under an ad
+# hoc timestamp (20260909120053) instead of the file's own version. Verified
+# byte-for-byte identical content before writing this workflow via
+# `select statements from supabase_migrations.schema_migrations where
+# version = '20260909120053'`.
+#
+# Net effect on the remote migration history table:
+#   - 20260909110434 (the git-tracked file) still shows as pending, even
+#     though its effect is already live.
+#   - 20260909120053 sits in the history with no corresponding file.
+#
+# This workflow only edits `supabase_migrations.schema_migrations` bookkeeping
+# rows via `supabase migration repair` -- it runs no DDL and does not touch
+# the schema itself (the trigger functions were already created by the
+# out-of-band apply). Narrowly scoped to these two specific, already-verified
+# versions on purpose -- not a general-purpose repair tool -- so it cannot be
+# reused to silently reconcile some other future mismatch without a new,
+# reviewed workflow change.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_project_ref:
+        description: "Type the target Supabase project ref to confirm (must match the SUPABASE_PROJECT_REF repo variable exactly)"
+        required: true
+      confirm_action:
+        description: "Type EXACTLY 'reconcile-20260909' to confirm: mark 20260909110434 applied, mark 20260909120053 reverted"
+        required: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify target project ref matches expectation
+        run: |
+          if [ "${{ inputs.confirm_project_ref }}" != "${{ vars.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::confirm_project_ref does not match the configured SUPABASE_PROJECT_REF repo variable -- refusing to proceed."
+            exit 1
+          fi
+          echo "Target project ref confirmed: ${{ vars.SUPABASE_PROJECT_REF }}"
+
+      - name: Verify action confirmation phrase
+        run: |
+          if [ "${{ inputs.confirm_action }}" != "reconcile-20260909" ]; then
+            echo "::error::confirm_action must be exactly 'reconcile-20260909' -- refusing to proceed."
+            exit 1
+          fi
+          echo "Action confirmed: reconcile-20260909"
+
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Migration status before repair
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
+
+      - name: Mark the git-tracked migration as applied (its SQL already ran under version 20260909120053)
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration repair --status applied 20260909110434 --db-url "$SUPABASE_DB_URL"
+
+      - name: Remove the orphan ad hoc version with no corresponding file
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration repair --status reverted 20260909120053 --db-url "$SUPABASE_DB_URL"
+
+      - name: Migration status after repair
+        env:
+          SUPABASE_DB_URL: postgresql://${{ vars.SUPABASE_DB_USER }}:${{ secrets.SUPABASE_DB_PASSWORD }}@${{ vars.SUPABASE_DB_HOST }}:5432/postgres
+        run: supabase migration list --db-url "$SUPABASE_DB_URL"
