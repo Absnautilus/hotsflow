@@ -18,7 +18,7 @@
 -- by 033_guest_requests_runtime_mapping.test.sql.
 begin;
 create extension if not exists pgtap;
-select plan(17);
+select plan(24);
 
 select is(
   (select prosecdef from pg_proc where proname = 'sync_guest_sessions_on_stay_change' and pronamespace = 'public'::regnamespace),
@@ -32,10 +32,11 @@ select is(
   'owned by the same role as this schema''s other privileged helpers -- no ownership drift'
 );
 
-select ok(
-  (select proconfig::text like '%search_path=%' and proconfig::text not like '%search_path=public%'
+select is(
+  (select array_to_string(proconfig, ',')
    from pg_proc where proname = 'sync_guest_sessions_on_stay_change' and pronamespace = 'public'::regnamespace),
-  'search_path is pinned empty, not the schema-qualified ''public'' used elsewhere -- every relation reference in the body is fully qualified instead'
+  'search_path=""',
+  'search_path is configured to exactly SET search_path = '''' (stored as search_path="") -- not merely "excludes public", the precise empty value'
 );
 
 select is(
@@ -113,7 +114,8 @@ from roles r where r.slug = 'property_admin';
 insert into rooms (id, hotel_id, room_number) values
   ('00000040-0000-0000-0000-000000000061', '00000040-0000-0000-0000-0000000000a1', 'A1'),
   ('00000040-0000-0000-0000-000000000062', '00000040-0000-0000-0000-0000000000b1', 'B1'),
-  ('00000040-0000-0000-0000-000000000063', '00000040-0000-0000-0000-0000000000a1', 'A2');
+  ('00000040-0000-0000-0000-000000000063', '00000040-0000-0000-0000-0000000000a1', 'A2'),
+  ('00000040-0000-0000-0000-000000000064', '00000040-0000-0000-0000-0000000000a1', 'A3');
 
 insert into stays (id, hotel_id, room_id, guest_last_name, check_in_at, check_out_at, status) values
   ('00000040-0000-0000-0000-000000000071', '00000040-0000-0000-0000-0000000000a1', '00000040-0000-0000-0000-000000000061', 'Rossi', now() - interval '1 day', now() + interval '1 day', 'active');
@@ -139,10 +141,14 @@ select ok(
 -- earlier: checking through the acting staff member's own eyes would
 -- itself fail with permission denied, proving nothing about the trigger.
 reset role;
+select is(
+  (select expires_at from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000081'),
+  (select check_out_at from stays where id = '00000040-0000-0000-0000-000000000071'),
+  'the session''s expires_at exactly matches the extended stays.check_out_at -- not merely both greater than an arbitrary bound'
+);
 select ok(
-  (select expires_at > now() + interval '1 day' and revoked_at is null
-   from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000081'),
-  'the active session''s expires_at was pushed out to match, and it stays unrevoked'
+  (select revoked_at is null from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000081'),
+  'the session stays unrevoked after the extension'
 );
 
 -- ### anticipate checkout (admin, own hotel) -- expires_at was pushed past
@@ -189,27 +195,72 @@ select ok(
 );
 
 -- ### no RLS bypass introduced: an unauthorized actor's blocked UPDATE
--- must leave both the stay and its session completely untouched. Both
--- denied actors also fail to SELECT this row at all (stays_select_front_desk
--- shares the exact same predicate as the write policy), so -- same lesson
--- as guest_requests_guest_sessions above -- the verification read must run
--- as the table owner too, not through the denied actor's own eyes. ###
+-- must leave both the stay AND its guest session completely untouched --
+-- not just stays.check_out_at. Uses a fresh, isolated stay + active
+-- (non-revoked) session, since the sessions mutated above were already
+-- revoked by the earlier scenarios and so couldn't prove anything about
+-- "unchanged". Both denied actors also fail to SELECT the stays row at
+-- all (stays_select_front_desk shares the exact same predicate as the
+-- write policy), so -- same lesson as guest_requests_guest_sessions above
+-- -- every verification read below runs as the table owner, not through
+-- the denied actor's own eyes. All four properties are re-checked after
+-- EACH of the two denied attempts: the stay's check_out_at, the session's
+-- expires_at, the session's revoked_at, and that no session was created
+-- or deleted for this stay (count stays at exactly 1, same id). Since the
+-- whole test runs inside a single transaction, now() is stable throughout,
+-- so re-evaluating now() + interval '1 day' below is an exact comparison
+-- against the fixture's original values, not an approximation. ###
+insert into stays (id, hotel_id, room_id, guest_last_name, check_in_at, check_out_at, status) values
+  ('00000040-0000-0000-0000-000000000073', '00000040-0000-0000-0000-0000000000a1', '00000040-0000-0000-0000-000000000064', 'Verdi', now() - interval '2 hours', now() + interval '1 day', 'active');
+insert into guest_requests_guest_sessions (id, stay_id, token_hash, expires_at) values
+  ('00000040-0000-0000-0000-000000000083', '00000040-0000-0000-0000-000000000073', 'test-token-hash-083', now() + interval '1 day');
+
 set local role authenticated;
 set local request.jwt.claim.sub = '00000040-0000-0000-0000-000000000043';
-update stays set check_out_at = now() + interval '5 days' where id = '00000040-0000-0000-0000-000000000071';
+update stays set check_out_at = now() + interval '5 days' where id = '00000040-0000-0000-0000-000000000073';
 reset role;
+select is(
+  (select check_out_at from stays where id = '00000040-0000-0000-0000-000000000073'),
+  (select now() + interval '1 day'),
+  'cross-hotel: stays.check_out_at is unchanged after the blocked update'
+);
+select is(
+  (select expires_at from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000083'),
+  (select now() + interval '1 day'),
+  'cross-hotel: the session''s expires_at is unchanged -- the trigger never fired'
+);
 select ok(
-  (select check_out_at < now() + interval '2 hours' from stays where id = '00000040-0000-0000-0000-000000000071'),
-  'an admin from an unrelated hotel cannot modify this stay -- check_out_at is unchanged, so the trigger never fired at all (it fires only after a real change)'
+  (select revoked_at is null from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000083'),
+  'cross-hotel: the session remains unrevoked'
+);
+select is(
+  (select count(*) from guest_requests_guest_sessions where stay_id = '00000040-0000-0000-0000-000000000073'),
+  1::bigint,
+  'cross-hotel: no session was created or deleted for this stay'
 );
 
 set local role authenticated;
 set local request.jwt.claim.sub = '00000040-0000-0000-0000-000000000042';
-update stays set check_out_at = now() + interval '5 days' where id = '00000040-0000-0000-0000-000000000071';
+update stays set check_out_at = now() + interval '5 days' where id = '00000040-0000-0000-0000-000000000073';
 reset role;
+select is(
+  (select check_out_at from stays where id = '00000040-0000-0000-0000-000000000073'),
+  (select now() + interval '1 day'),
+  'housekeeping operatore: stays.check_out_at is unchanged after the blocked update'
+);
+select is(
+  (select expires_at from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000083'),
+  (select now() + interval '1 day'),
+  'housekeeping operatore: the session''s expires_at is unchanged -- the trigger never fired'
+);
 select ok(
-  (select check_out_at < now() + interval '2 hours' from stays where id = '00000040-0000-0000-0000-000000000071'),
-  'a housekeeping operatore (not reception, not admin) cannot modify a stay -- check_out_at is unchanged'
+  (select revoked_at is null from guest_requests_guest_sessions where id = '00000040-0000-0000-0000-000000000083'),
+  'housekeeping operatore: the session remains unrevoked'
+);
+select is(
+  (select count(*) from guest_requests_guest_sessions where stay_id = '00000040-0000-0000-0000-000000000073'),
+  1::bigint,
+  'housekeeping operatore: no session was created or deleted for this stay'
 );
 
 select * from finish();
