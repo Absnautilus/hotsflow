@@ -78,6 +78,16 @@ export interface CreateTeamMemberWithCredentialsInput {
   jobTitleId?: string | null
 }
 
+// loginIdentifier is the synthesized auth.users email -- opaque to the
+// caller, shown once so the admin can hand it to the new team member
+// alongside the password they just chose (same "shown once" pattern as a
+// guest stay's PIN).
+export interface CreateTeamMemberWithCredentialsResult {
+  profileId: string
+  membershipId: string
+  loginIdentifier: string
+}
+
 export interface ResetTeamMemberPasswordInput {
   membershipId: string
   newPassword: string

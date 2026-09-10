@@ -12,6 +12,7 @@ export type {
   TeamMember,
   InviteTeamMemberInput,
   CreateTeamMemberWithCredentialsInput,
+  CreateTeamMemberWithCredentialsResult,
   ResetTeamMemberPasswordInput,
   UpdateTeamMemberInput,
   Membership,

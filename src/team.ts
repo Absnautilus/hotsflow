@@ -3,6 +3,7 @@ import type { Database } from './types/database'
 import type {
   CoreRole,
   CreateTeamMemberWithCredentialsInput,
+  CreateTeamMemberWithCredentialsResult,
   EmploymentStatus,
   InviteTeamMemberInput,
   JobTitle,
@@ -135,9 +136,10 @@ export async function inviteTeamMember(client: SupabaseClient<Database>, input: 
   if (error) throw error
 }
 
-export async function createTeamMemberWithCredentials(client: SupabaseClient<Database>, input: CreateTeamMemberWithCredentialsInput): Promise<void> {
-  const { error } = await client.functions.invoke('create-team-member-credentials', { body: input })
+export async function createTeamMemberWithCredentials(client: SupabaseClient<Database>, input: CreateTeamMemberWithCredentialsInput): Promise<CreateTeamMemberWithCredentialsResult> {
+  const { data, error } = await client.functions.invoke('create-team-member-credentials', { body: input })
   if (error) throw error
+  return data as CreateTeamMemberWithCredentialsResult
 }
 
 export async function resetTeamMemberPassword(client: SupabaseClient<Database>, input: ResetTeamMemberPasswordInput): Promise<void> {

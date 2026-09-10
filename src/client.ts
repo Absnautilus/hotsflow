@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types/database'
-import type { CoreRole, CreateTeamMemberWithCredentialsInput, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, ResetTeamMemberPasswordInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
+import type { CoreRole, CreateTeamMemberWithCredentialsInput, CreateTeamMemberWithCredentialsResult, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, ResetTeamMemberPasswordInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
 import { getCurrentProfile, updateCurrentProfile } from './profile'
 import { getAccessibleProperties, getMembership, updateProperty } from './memberships'
 import { hasPermission } from './permissions'
@@ -25,7 +25,7 @@ export interface CoreClient {
   createJobTitle: (propertyId: string, name: string) => Promise<JobTitle>
   updateJobTitle: (id: string, changes: { name?: string; active?: boolean }) => Promise<void>
   inviteTeamMember: (input: InviteTeamMemberInput) => Promise<void>
-  createTeamMemberWithCredentials: (input: CreateTeamMemberWithCredentialsInput) => Promise<void>
+  createTeamMemberWithCredentials: (input: CreateTeamMemberWithCredentialsInput) => Promise<CreateTeamMemberWithCredentialsResult>
   resetTeamMemberPassword: (input: ResetTeamMemberPasswordInput) => Promise<void>
   updateTeamMember: (input: UpdateTeamMemberInput) => Promise<void>
   updateCurrentProfile: (changes: { fullName: string; avatarUrl?: string | null }) => Promise<Profile>
