@@ -42,7 +42,7 @@ consumes those answers.
   `permissions`, `role_permissions`, `profiles`, `memberships`,
   `guest_sessions` — full schema, RLS, and six SQL helper functions.
 - A dev-only seed (`supabase/seed.sql`) and a minimal TypeScript SDK
-  (`src/`).
+  (`packages/core-sdk/src/`).
 - 9 pgTAP test files (`supabase/tests/`) proving tenant isolation,
   multi-property access, role-based authorization, module entitlement,
   membership revocation, guest session expiry/revocation/cross-property

@@ -84,19 +84,32 @@ supabase db reset
 
 ## Struttura
 
+npm workspaces (Fase 4 — fondazione monorepo, nessun cambiamento di
+comportamento: `packages/core-sdk` è lo stesso `src/` di sempre, solo
+spostato). `apps/web` e `modules/*` non esistono ancora — arrivano nelle
+fasi successive del piano di consolidamento, vedi
+`docs/architecture/monorepo.md`.
+
 ```
+packages/
+  core-sdk/      il Core SDK (ex src/ alla radice) — identità, tenant,
+                 permessi, entitlement, guest session
+    src/
+    package.json, tsconfig.json, eslint.config.mjs
+  config/        base tsconfig/eslint condivisa, consumata via
+                 devDependency (@hotsflow/config), mai import relativo
 supabase/
   migrations/    migration history condivisa Core + moduli migrati
   tests/         pgTAP: isolamento tenant, permessi, entitlement, guest session,
                  gerarchia ruoli e regression di sicurezza
   seed.sql       dati di sviluppo; reference data di sistema nelle migration
   config.toml
-src/
-  types/database.ts
-  types/domain.ts
-  client.ts
-  profile.ts, memberships.ts, permissions.ts, modules.ts, guestSession.ts
-  moduleContract.ts
+scripts/
+  ci/            check di confine tra workspace, dipendenze circolari,
+                 duplicazione pacchetti sensibili (React/Supabase) —
+                 eseguiti in CI, non solo documentati
+  dry-run/, freeze/, production/, verify/   script di migrazione/rehearsal
+                 una tantum, non fanno parte di alcun workspace
 .github/workflows/ci.yml
 ```
 
@@ -108,10 +121,16 @@ Database:
 supabase test db
 ```
 
-Core SDK:
+Da root, su tutti i workspace:
 
 ```bash
 npm install
+npm run lint
 npm run typecheck
 npm test
+npm run build         # no-op finché nessun workspace definisce "build"
+npm run test:db        # richiede `supabase start` già avviato
+npm run check:boundaries   # direzione delle dipendenze tra workspace
+npm run check:circular     # cicli di import
+npm run check:dedupe       # una sola versione installata di React/Supabase
 ```
