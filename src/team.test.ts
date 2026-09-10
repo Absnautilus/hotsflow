@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types/database'
-import { getTeamMembers, updateJobTitle, updateTeamMember } from './team'
+import { getTeamMembers, removeTeamMember, updateJobTitle, updateTeamMember } from './team'
 import { mockQueryBuilder } from './testSupport'
 
 describe('getTeamMembers', () => {
@@ -42,6 +42,14 @@ describe('Team mutations', () => {
 
     await expect(updateJobTitle(client, 'job-1', { active: false }))
       .rejects.toThrow('job_title_update_not_applied')
+  })
+
+  it('rejects a membership removal silently filtered out by RLS', async () => {
+    const builder = mockQueryBuilder({ data: null, error: null })
+    const client = { from: vi.fn(() => builder) } as unknown as SupabaseClient<Database>
+
+    await expect(removeTeamMember(client, { membershipId: 'membership-1' }))
+      .rejects.toThrow('membership_delete_not_applied')
   })
 
   it('rejects a membership-status update silently filtered out by RLS', async () => {

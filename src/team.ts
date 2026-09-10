@@ -9,6 +9,7 @@ import type {
   JobTitle,
   Membership,
   Profile,
+  RemoveTeamMemberInput,
   ResetTeamMemberPasswordInput,
   TeamMember,
   UpdateTeamMemberInput,
@@ -145,6 +146,15 @@ export async function createTeamMemberWithCredentials(client: SupabaseClient<Dat
 export async function resetTeamMemberPassword(client: SupabaseClient<Database>, input: ResetTeamMemberPasswordInput): Promise<void> {
   const { error } = await client.functions.invoke('reset-team-member-password', { body: input })
   if (error) throw error
+}
+
+// Deletes a direct, property-scoped membership only -- memberships_delete
+// (see 20260910130000_membership_delete.sql) rejects an org-wide one, your
+// own row, and any property you don't hold core.staff.manage on.
+export async function removeTeamMember(client: SupabaseClient<Database>, input: RemoveTeamMemberInput): Promise<void> {
+  const { data, error } = await client.from('memberships').delete().eq('id', input.membershipId).select('id').maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('membership_delete_not_applied')
 }
 
 export async function updateTeamMember(client: SupabaseClient<Database>, input: UpdateTeamMemberInput): Promise<void> {
