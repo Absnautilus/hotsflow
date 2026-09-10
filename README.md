@@ -89,7 +89,11 @@ npm workspaces, consolidamento in corso secondo
 `modules/housekeeping` (Fase 5) e `apps/web` (Fase 7) sono trasferimenti
 riga-per-riga dai rispettivi repository precedenti, senza cambi di
 comportamento — vedi lo storico dei commit per il dettaglio di ciascuna
-fase.
+fase. Dalla Fase 6, `apps/web` dipende da `modules/housekeeping` come
+vera dipendenza workspace (`"*"`, non più `github:` pin), e
+`modules/housekeeping` ha una build reale in libreria (Vite lib mode) che
+produce `dist/` (JS, CSS Tailwind v4 compilato, dichiarazioni `.d.ts`
+generate dai sorgenti, non a mano).
 
 ```
 apps/
@@ -106,9 +110,12 @@ packages/
   config/        base tsconfig/eslint condivisa, consumata via
                  devDependency (@hotsflow/config), mai import relativo
 modules/
-  housekeeping/  modulo staff Housekeeping embeddabile nello shell
+  housekeeping/  modulo staff Housekeeping embeddabile nello shell — build
+                 in libreria (Vite lib mode + Tailwind v4/PostCSS + dts),
+                 consumato da apps/web via dist/, non via src/
     src/
-    package.json, tsconfig.json, eslint.config.mjs
+    package.json, tsconfig.json, eslint.config.mjs, vite.config.ts,
+    postcss.config.js
 supabase/
   migrations/    migration history condivisa Core + moduli migrati
   tests/         pgTAP: isolamento tenant, permessi, entitlement, guest session,
@@ -139,7 +146,9 @@ npm install
 npm run lint
 npm run typecheck
 npm test
-npm run build         # builda apps/web (tsc -b && vite build)
+npm run build         # builda modules/housekeeping (vite build, dist/
+                       # reale con JS/CSS/dts) e poi apps/web
+                       # (tsc -b && vite build), che consuma quel dist/
 npm run test:db        # richiede `supabase start` già avviato
 npm run check:boundaries   # direzione delle dipendenze tra workspace
 npm run check:circular     # cicli di import
