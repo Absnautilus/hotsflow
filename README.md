@@ -69,6 +69,8 @@ docs/
   guest-access.md                    guest_sessions
   rls.md                             enforcement e helper Core
   module-integration.md              integrazione dei moduli con la piattaforma
+  architecture/monorepo.md           target monorepo (apps/web, modules/*,
+                                      packages/*), boundary, CI, rollback
 ```
 
 ## Sviluppo locale
