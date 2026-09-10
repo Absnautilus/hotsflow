@@ -96,14 +96,14 @@ jobs:
               echo "$local_val"
             fi
           done | sort)
-          expected=20260909110434
+          expected=20260909120053
           echo "Pending (local-only) migrations:"
           echo "$pending"
           if [ "$pending" != "$expected" ]; then
-            echo "::error::Pending migration set does not match exactly the approved migration (20260909110434) — refusing to apply anything."
+            echo "::error::Pending migration set does not match exactly the approved migration (20260909120053) — refusing to apply anything."
             exit 1
           fi
-          echo "Pending set confirmed: exactly the approved migration 20260909110434."
+          echo "Pending set confirmed: exactly the approved migration 20260909120053."
 
       - name: Preview include-all apply (dry run, no changes made)
         if: inputs.mode == 'apply' && inputs.migration_scope == 'include-all'
