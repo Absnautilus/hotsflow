@@ -15,7 +15,7 @@ export type {
   CreateTeamMemberWithCredentialsResult,
   ResetTeamMemberPasswordInput,
   UpdateTeamMemberInput,
-  RemoveTeamMemberInput,
+  ArchiveTeamMemberInput,
   Membership,
   MembershipStatus,
   RoleScope,

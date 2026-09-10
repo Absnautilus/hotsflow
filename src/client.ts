@@ -1,12 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types/database'
-import type { CoreRole, CreateTeamMemberWithCredentialsInput, CreateTeamMemberWithCredentialsResult, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, RemoveTeamMemberInput, ResetTeamMemberPasswordInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
+import type { ArchiveTeamMemberInput, CoreRole, CreateTeamMemberWithCredentialsInput, CreateTeamMemberWithCredentialsResult, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, ResetTeamMemberPasswordInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
 import { getCurrentProfile, updateCurrentProfile } from './profile'
 import { getAccessibleProperties, getMembership, updateProperty } from './memberships'
 import { hasPermission } from './permissions'
 import { getEnabledModules } from './modules'
 import { getGuestRequestsLegacyHotelId } from './guestRequests'
-import { createJobTitle, createTeamMemberWithCredentials, getJobTitles, getPropertyRoles, getTeamMembers, inviteTeamMember, removeTeamMember, resetTeamMemberPassword, updateJobTitle, updateTeamMember } from './team'
+import { archiveTeamMember, createJobTitle, createTeamMemberWithCredentials, getJobTitles, getPropertyRoles, getTeamMembers, inviteTeamMember, resetTeamMemberPassword, updateJobTitle, updateTeamMember } from './team'
 
 export interface CoreClient {
   // Escape hatch for a module that needs the raw Supabase client (e.g. to
@@ -28,7 +28,7 @@ export interface CoreClient {
   createTeamMemberWithCredentials: (input: CreateTeamMemberWithCredentialsInput) => Promise<CreateTeamMemberWithCredentialsResult>
   resetTeamMemberPassword: (input: ResetTeamMemberPasswordInput) => Promise<void>
   updateTeamMember: (input: UpdateTeamMemberInput) => Promise<void>
-  removeTeamMember: (input: RemoveTeamMemberInput) => Promise<void>
+  archiveTeamMember: (input: ArchiveTeamMemberInput) => Promise<void>
   updateCurrentProfile: (changes: { fullName: string; avatarUrl?: string | null }) => Promise<Profile>
   updateProperty: (propertyId: string, changes: { name: string; timezone: string; settings?: Record<string, unknown> }) => Promise<Property>
 }
@@ -52,7 +52,7 @@ export function createCoreClient(supabaseUrl: string, supabaseAnonKey: string): 
     createTeamMemberWithCredentials: (input) => createTeamMemberWithCredentials(raw, input),
     resetTeamMemberPassword: (input) => resetTeamMemberPassword(raw, input),
     updateTeamMember: (input) => updateTeamMember(raw, input),
-    removeTeamMember: (input) => removeTeamMember(raw, input),
+    archiveTeamMember: (input) => archiveTeamMember(raw, input),
     updateCurrentProfile: (changes) => updateCurrentProfile(raw, changes),
     updateProperty: (propertyId, changes) => updateProperty(raw, propertyId, changes),
   }

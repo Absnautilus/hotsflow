@@ -284,6 +284,7 @@ export interface Database {
           role_id: string
           status: string
           username: string | null
+          archived_at: string | null
           invited_by: string | null
           created_at: string
           updated_at: string
@@ -296,6 +297,7 @@ export interface Database {
           role_id: string
           status?: string
           username?: string | null
+          archived_at?: string | null
           invited_by?: string | null
           created_at?: string
           updated_at?: string
@@ -308,6 +310,7 @@ export interface Database {
           role_id?: string
           status?: string
           username?: string | null
+          archived_at?: string | null
           invited_by?: string | null
           created_at?: string
           updated_at?: string
@@ -484,6 +487,10 @@ export interface Database {
       }
       assign_membership_role: {
         Args: { p_membership_id: string; p_new_role_id: string }
+        Returns: Database['public']['Tables']['memberships']['Row']
+      }
+      archive_team_member: {
+        Args: { p_membership_id: string }
         Returns: Database['public']['Tables']['memberships']['Row']
       }
       role_assignment_allowed: {

@@ -9,7 +9,7 @@ import type {
   JobTitle,
   Membership,
   Profile,
-  RemoveTeamMemberInput,
+  ArchiveTeamMemberInput,
   ResetTeamMemberPasswordInput,
   TeamMember,
   UpdateTeamMemberInput,
@@ -72,6 +72,7 @@ export async function getTeamMembers(client: SupabaseClient<Database>, propertyI
     .from('memberships')
     .select('*')
     .or(`property_id.eq.${propertyId},organization_id.eq.${propertyResult.data.organization_id}`)
+    .is('archived_at', null)
   if (membershipsResult.error) throw membershipsResult.error
   const memberships = membershipsResult.data ?? []
   if (memberships.length === 0) return []
@@ -148,13 +149,16 @@ export async function resetTeamMemberPassword(client: SupabaseClient<Database>, 
   if (error) throw error
 }
 
-// Deletes a direct, property-scoped membership only -- memberships_delete
-// (see 20260910130000_membership_delete.sql) rejects an org-wide one, your
-// own row, and any property you don't hold core.staff.manage on.
-export async function removeTeamMember(client: SupabaseClient<Database>, input: RemoveTeamMemberInput): Promise<void> {
-  const { data, error } = await client.from('memberships').delete().eq('id', input.membershipId).select('id').maybeSingle()
+// Archives a direct, property-scoped membership -- archive_team_member()
+// (see 20260910140000_archive_team_member.sql) rejects an org-wide one,
+// your own row, and any property you don't hold core.staff.manage on. The
+// row and everything referencing it (job title, historical stays/requests,
+// audit log entries) survive; it's just hidden from getTeamMembers and its
+// status moves to 'suspended'.
+export async function archiveTeamMember(client: SupabaseClient<Database>, input: ArchiveTeamMemberInput): Promise<void> {
+  const { data, error } = await client.rpc('archive_team_member', { p_membership_id: input.membershipId })
   if (error) throw error
-  if (!data) throw new Error('membership_delete_not_applied')
+  if (!data) throw new Error('membership_archive_not_applied')
 }
 
 export async function updateTeamMember(client: SupabaseClient<Database>, input: UpdateTeamMemberInput): Promise<void> {
