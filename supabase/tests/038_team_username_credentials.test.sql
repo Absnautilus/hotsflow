@@ -59,11 +59,15 @@ select lives_ok(
   'username stays optional -- an email-invited membership with no username still inserts fine'
 );
 
+-- Plain declarative CHECK violations get Postgres's own generated message
+-- ('new row for relation ... violates check constraint "name"'), not just
+-- the constraint name -- unlike 034's throws_ok cases, which match a custom
+-- RAISE EXCEPTION message. errcode alone is enough to identify these.
 select throws_ok(
   $$ insert into memberships (profile_id, property_id, role_id, status, username)
      select '00000038-0000-0000-0000-000000000045', '00000038-0000-0000-0000-000000000011', id, 'active', 'AB'
      from roles where slug = 'manager' $$,
-  '23514', 'memberships_username_format',
+  '23514', null,
   'a username shorter than 3 chars or with uppercase letters is rejected'
 );
 
@@ -71,7 +75,7 @@ select throws_ok(
   $$ insert into memberships (profile_id, property_id, role_id, status, username)
      select '00000038-0000-0000-0000-000000000046', '00000038-0000-0000-0000-000000000011', id, 'active', 'ma rio!'
      from roles where slug = 'manager' $$,
-  '23514', 'memberships_username_format',
+  '23514', null,
   'a username with spaces or symbols outside [a-z0-9_-] is rejected'
 );
 
