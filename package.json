@@ -8,7 +8,8 @@
   },
   "workspaces": [
     "packages/*",
-    "modules/*"
+    "modules/*",
+    "apps/*"
   ],
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "eslint": "^9.19.0",
-    "typescript": "~5.7.0"
+    "typescript": "~5.7.0",
+    "vite": "^7.1.5"
   }
 }

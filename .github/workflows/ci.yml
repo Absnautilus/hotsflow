@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  sdk:
-    name: Core SDK — lint + typecheck + tests
+  workspaces:
+    name: Workspaces — lint + typecheck + tests + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +19,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build
 
   # These three run against the workspace/dependency graph, not any one
   # workspace's own code, so they get their own jobs rather than steps
