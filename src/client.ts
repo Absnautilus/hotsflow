@@ -29,7 +29,7 @@ export interface CoreClient {
   resetTeamMemberPassword: (input: ResetTeamMemberPasswordInput) => Promise<void>
   updateTeamMember: (input: UpdateTeamMemberInput) => Promise<void>
   updateCurrentProfile: (changes: { fullName: string; avatarUrl?: string | null }) => Promise<Profile>
-  updateProperty: (propertyId: string, changes: { name: string; timezone: string }) => Promise<Property>
+  updateProperty: (propertyId: string, changes: { name: string; timezone: string; settings?: Record<string, unknown> }) => Promise<Property>
 }
 
 export function createCoreClient(supabaseUrl: string, supabaseAnonKey: string): CoreClient {
