@@ -35,6 +35,7 @@ function mapMembershipRow(row: Database['public']['Tables']['memberships']['Row'
     organizationId: row.organization_id,
     roleId: row.role_id,
     status: row.status as Membership['status'],
+    username: row.username,
   }
 }
 

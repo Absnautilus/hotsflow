@@ -63,6 +63,36 @@ export interface InviteTeamMemberInput {
   jobTitleId?: string | null
 }
 
+// The credentials alternative to InviteTeamMemberInput -- no email, no
+// invite mail sent. username is scoped unique per property (see
+// memberships_property_username_unique); the account's real auth.users
+// email is a synthetic, globally-unique value the Edge Function derives
+// from username + property + organization, invisible to both the admin
+// and the staff member (who log in with plain username + password).
+export interface CreateTeamMemberWithCredentialsInput {
+  propertyId: string
+  fullName: string
+  username: string
+  password: string
+  roleId: string
+  jobTitleId?: string | null
+}
+
+// loginIdentifier is the synthesized auth.users email -- opaque to the
+// caller, shown once so the admin can hand it to the new team member
+// alongside the password they just chose (same "shown once" pattern as a
+// guest stay's PIN).
+export interface CreateTeamMemberWithCredentialsResult {
+  profileId: string
+  membershipId: string
+  loginIdentifier: string
+}
+
+export interface ResetTeamMemberPasswordInput {
+  membershipId: string
+  newPassword: string
+}
+
 export interface UpdateTeamMemberInput {
   membershipId: string
   profileId: string
@@ -84,6 +114,9 @@ export interface Membership {
   organizationId: string | null
   roleId: string
   status: MembershipStatus
+  // Set only for a credentials-based (no email) account -- null for every
+  // membership created via the email-invite flow.
+  username: string | null
 }
 
 // Deliberately a plain string, not a union of literal slugs: a new module

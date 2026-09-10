@@ -2,11 +2,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types/database'
 import type {
   CoreRole,
+  CreateTeamMemberWithCredentialsInput,
+  CreateTeamMemberWithCredentialsResult,
   EmploymentStatus,
   InviteTeamMemberInput,
   JobTitle,
   Membership,
   Profile,
+  ResetTeamMemberPasswordInput,
   TeamMember,
   UpdateTeamMemberInput,
 } from './types/domain'
@@ -21,6 +24,7 @@ function mapMembership(row: MembershipRow): Membership {
     organizationId: row.organization_id,
     roleId: row.role_id,
     status: row.status as Membership['status'],
+    username: row.username,
   }
 }
 
@@ -129,6 +133,17 @@ export async function updateJobTitle(client: SupabaseClient<Database>, id: strin
 
 export async function inviteTeamMember(client: SupabaseClient<Database>, input: InviteTeamMemberInput): Promise<void> {
   const { error } = await client.functions.invoke('invite-team-member', { body: input })
+  if (error) throw error
+}
+
+export async function createTeamMemberWithCredentials(client: SupabaseClient<Database>, input: CreateTeamMemberWithCredentialsInput): Promise<CreateTeamMemberWithCredentialsResult> {
+  const { data, error } = await client.functions.invoke('create-team-member-credentials', { body: input })
+  if (error) throw error
+  return data as CreateTeamMemberWithCredentialsResult
+}
+
+export async function resetTeamMemberPassword(client: SupabaseClient<Database>, input: ResetTeamMemberPasswordInput): Promise<void> {
+  const { error } = await client.functions.invoke('reset-team-member-password', { body: input })
   if (error) throw error
 }
 
