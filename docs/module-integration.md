@@ -85,13 +85,14 @@ const enabledModules = await core.getEnabledModules(propertyId)
 `core.raw` is the underlying `SupabaseClient` — the escape hatch for a
 module's own queries against its own tables. The SDK never wraps or proxies
 module data; it only answers identity/tenant/permission/entitlement
-questions. See `src/index.ts` for the full exported surface, and
-`src/types/domain.ts` for the shapes these calls return — never the raw
-database row shapes from `src/types/database.ts`.
+questions. See `packages/core-sdk/src/index.ts` for the full exported
+surface, and `packages/core-sdk/src/types/domain.ts` for the shapes these
+calls return — never the raw database row shapes from
+`packages/core-sdk/src/types/database.ts`.
 
 ## Declaring a module
 
-`ModuleDescriptor` (`src/moduleContract.ts`) is the shared *type* a module
+`ModuleDescriptor` (`packages/core-sdk/src/moduleContract.ts`) is the shared *type* a module
 uses to describe itself:
 
 ```ts

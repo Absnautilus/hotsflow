@@ -1,23 +1,26 @@
 {
-  "name": "@hotsflow/core-sdk",
-  "version": "0.1.0",
+  "name": "hotsflow",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "2.116.0"
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test:db": "supabase db reset && supabase test db",
+    "check:boundaries": "node scripts/ci/check-workspace-boundaries.mjs",
+    "check:circular": "node scripts/ci/check-circular-deps.mjs",
+    "check:dedupe": "node scripts/ci/check-dependency-dedupe.mjs"
   },
   "devDependencies": {
-    "typescript": "~5.7.0",
-    "vitest": "^2.1.9"
+    "eslint": "^9.19.0",
+    "typescript": "~5.7.0"
   }
 }

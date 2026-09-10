@@ -7,7 +7,7 @@ on:
 
 jobs:
   sdk:
-    name: Core SDK — typecheck + tests
+    name: Core SDK — lint + typecheck + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,8 +16,50 @@ jobs:
           node-version-file: '.nvmrc'
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # These three run against the workspace/dependency graph, not any one
+  # workspace's own code, so they get their own jobs rather than steps
+  # bolted onto `sdk` -- a failure here means "the monorepo's shape is
+  # wrong", not "a package's own tests failed", and that should be
+  # immediately obvious from the job name alone.
+  workspace-boundaries:
+    name: Workspace boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:boundaries
+
+  circular-dependencies:
+    name: Circular dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:circular
+
+  dependency-dedupe:
+    name: Dependency dedupe (React/Supabase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm run check:dedupe
 
   database:
     name: Database — migrations + seed + pgTAP
