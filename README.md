@@ -84,20 +84,31 @@ supabase db reset
 
 ## Struttura
 
-npm workspaces (Fase 4 — fondazione monorepo, nessun cambiamento di
-comportamento: `packages/core-sdk` è lo stesso `src/` di sempre, solo
-spostato). `apps/web` e `modules/*` non esistono ancora — arrivano nelle
-fasi successive del piano di consolidamento, vedi
-`docs/architecture/monorepo.md`.
+npm workspaces, consolidamento in corso secondo
+`docs/architecture/monorepo.md`. `packages/core-sdk` (Fase 4),
+`modules/housekeeping` (Fase 5) e `apps/web` (Fase 7) sono trasferimenti
+riga-per-riga dai rispettivi repository precedenti, senza cambi di
+comportamento — vedi lo storico dei commit per il dettaglio di ciascuna
+fase.
 
 ```
+apps/
+  web/           lo shell applicativo (ex repository hotsflow-app) —
+                 routing, auth, property switcher, Home/Team/Settings,
+                 punto di montaggio dei moduli embedded
+    src/
+    package.json, vite.config.ts, vercel.json
 packages/
-  core-sdk/      il Core SDK (ex src/ alla radice) — identità, tenant,
-                 permessi, entitlement, guest session
+  core-sdk/      il Core SDK — identità, tenant, permessi, entitlement,
+                 guest session
     src/
     package.json, tsconfig.json, eslint.config.mjs
   config/        base tsconfig/eslint condivisa, consumata via
                  devDependency (@hotsflow/config), mai import relativo
+modules/
+  housekeeping/  modulo staff Housekeeping embeddabile nello shell
+    src/
+    package.json, tsconfig.json, eslint.config.mjs
 supabase/
   migrations/    migration history condivisa Core + moduli migrati
   tests/         pgTAP: isolamento tenant, permessi, entitlement, guest session,
@@ -128,7 +139,7 @@ npm install
 npm run lint
 npm run typecheck
 npm test
-npm run build         # no-op finché nessun workspace definisce "build"
+npm run build         # builda apps/web (tsc -b && vite build)
 npm run test:db        # richiede `supabase start` già avviato
 npm run check:boundaries   # direzione delle dipendenze tra workspace
 npm run check:circular     # cicli di import

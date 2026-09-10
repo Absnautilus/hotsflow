@@ -1,0 +1,118 @@
+/* Shell-level atmosphere from the approved Hotsflow v2 visual language.
+   Keep dense module work surfaces solid; the shell supplies the ambient wash
+   and glass only to global chrome/high-level surfaces. */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: var(--bg);
+}
+
+/* The fixed sidebar is global chrome and must sit above the shell atmosphere. */
+.sidebar {
+  z-index: 30;
+}
+
+.shell-content {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  background: var(--bg);
+}
+
+/* Keep the atmospheric wash fixed to the viewport instead of anchoring it to
+   .shell-content height. That makes Home and long module/admin routes share
+   the exact same background instead of shifting the gradients per page. */
+.shell-content::before {
+  content: '';
+  position: fixed;
+  z-index: -2;
+  inset: 0 0 0 236px;
+  pointer-events: none;
+  background:
+    radial-gradient(980px 430px at 14% -8%, rgba(156, 79, 199, 0.13), transparent 64%),
+    radial-gradient(820px 380px at 98% 2%, rgba(42, 95, 204, 0.09), transparent 60%),
+    var(--bg);
+}
+
+.shell-content::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  inset: 0 0 0 236px;
+  pointer-events: none;
+  background:
+    radial-gradient(560px 340px at 72% 80%, rgba(156, 79, 199, 0.038), transparent 74%),
+    radial-gradient(520px 320px at 38% 60%, rgba(42, 95, 204, 0.032), transparent 76%);
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+}
+
+.module-card {
+  transition:
+    transform 220ms var(--motion-ease),
+    box-shadow 220ms var(--motion-ease),
+    border-color 220ms var(--motion-ease);
+}
+
+.module-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(156, 79, 199, 0.18);
+}
+
+.nav-item,
+.property-switcher,
+.mobile-header button,
+.drawer-header button {
+  transition:
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    border-radius var(--motion-panel) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+
+.nav-item:active,
+.mobile-header button:active,
+.drawer-header button:active {
+  transform: scale(0.96);
+}
+
+@media (max-width: 920px) {
+  .sidebar {
+    z-index: auto;
+  }
+
+  .shell-content::before,
+  .shell-content::after {
+    inset: 0;
+  }
+
+  .shell-content::before {
+    background:
+      radial-gradient(540px 300px at 10% 5%, rgba(156, 79, 199, 0.13), transparent 66%),
+      radial-gradient(500px 320px at 100% 18%, rgba(42, 95, 204, 0.075), transparent 66%),
+      var(--bg);
+  }
+
+  .mobile-header {
+    background: rgba(22, 24, 43, 0.94);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(145%);
+    -webkit-backdrop-filter: blur(16px) saturate(145%);
+  }
+
+  .mobile-nav {
+    background: rgba(255, 255, 255, 0.76);
+    border-top-color: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-card:hover {
+    transform: none;
+  }
+}
