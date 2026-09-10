@@ -11,6 +11,8 @@ export type {
   EmploymentStatus,
   TeamMember,
   InviteTeamMemberInput,
+  CreateTeamMemberWithCredentialsInput,
+  ResetTeamMemberPasswordInput,
   UpdateTeamMemberInput,
   Membership,
   MembershipStatus,

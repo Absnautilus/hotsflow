@@ -283,6 +283,7 @@ export interface Database {
           organization_id: string | null
           role_id: string
           status: string
+          username: string | null
           invited_by: string | null
           created_at: string
           updated_at: string
@@ -294,6 +295,7 @@ export interface Database {
           organization_id?: string | null
           role_id: string
           status?: string
+          username?: string | null
           invited_by?: string | null
           created_at?: string
           updated_at?: string
@@ -305,6 +307,7 @@ export interface Database {
           organization_id?: string | null
           role_id?: string
           status?: string
+          username?: string | null
           invited_by?: string | null
           created_at?: string
           updated_at?: string

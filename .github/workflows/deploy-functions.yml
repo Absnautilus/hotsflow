@@ -1,0 +1,56 @@
+name: Deploy Edge Function to shared Supabase project
+
+# Manual only, on purpose, same posture as deploy-migrations.yml: this repo
+# has no automatic deploy-on-push for anything hitting the real hosted
+# project. `function_name` picks one function (or "all") to deploy;
+# `confirm_project_ref` must match the configured project exactly before
+# anything runs.
+on:
+  workflow_dispatch:
+    inputs:
+      function_name:
+        description: "Which Edge Function to deploy"
+        required: true
+        type: choice
+        options:
+          - invite-team-member
+          - create-team-member-credentials
+          - reset-team-member-password
+          - all
+      confirm_project_ref:
+        description: "Type the target Supabase project ref to confirm (must match the SUPABASE_PROJECT_REF repo variable exactly)"
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify target project ref matches expectation
+        run: |
+          if [ "${{ inputs.confirm_project_ref }}" != "${{ vars.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::confirm_project_ref does not match the configured SUPABASE_PROJECT_REF repo variable -- refusing to proceed."
+            exit 1
+          fi
+          echo "Target project ref confirmed: ${{ vars.SUPABASE_PROJECT_REF }}"
+
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy selected function
+        if: inputs.function_name != 'all'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy ${{ inputs.function_name }} --project-ref ${{ vars.SUPABASE_PROJECT_REF }}
+
+      - name: Deploy every function
+        if: inputs.function_name == 'all'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref ${{ vars.SUPABASE_PROJECT_REF }}
+
+      - name: List deployed functions (verification)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions list --project-ref ${{ vars.SUPABASE_PROJECT_REF }}
