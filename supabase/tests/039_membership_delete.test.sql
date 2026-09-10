@@ -44,39 +44,56 @@ insert into memberships (id, profile_id, organization_id, role_id, status)
 select '00000039-0000-0000-0000-000000000054', '00000039-0000-0000-0000-000000000044', '00000039-0000-0000-0000-000000000001', id, 'active'
 from roles where slug = 'organization_admin';
 
+-- Verification reads run as the table owner (reset role), not the acting
+-- staff member: memberships_select is scoped the same as the delete policy,
+-- so an actor blocked from deleting a cross-property/org-wide row usually
+-- can't see it either -- checking "still there" through their own eyes
+-- would read 0 rows regardless of whether the delete was blocked or simply
+-- invisible, making the assertion meaningless.
 set local role authenticated;
 set local request.jwt.claim.sub = '00000039-0000-0000-0000-000000000041';
-
 delete from memberships where id = '00000039-0000-0000-0000-000000000052';
+reset role;
 select is(
   (select count(*)::int from memberships where id = '00000039-0000-0000-0000-000000000052'),
   0,
   'a property admin can remove a direct membership on their own property'
 );
 
+set local role authenticated;
+set local request.jwt.claim.sub = '00000039-0000-0000-0000-000000000041';
 delete from memberships where id = '00000039-0000-0000-0000-000000000051';
+reset role;
 select is(
   (select count(*)::int from memberships where id = '00000039-0000-0000-0000-000000000051'),
   1,
   'a property admin cannot remove their own membership'
 );
 
+set local role authenticated;
+set local request.jwt.claim.sub = '00000039-0000-0000-0000-000000000041';
 delete from memberships where id = '00000039-0000-0000-0000-000000000054';
+reset role;
 select is(
   (select count(*)::int from memberships where id = '00000039-0000-0000-0000-000000000054'),
   1,
   'an org-wide membership cannot be removed from a single property''s Team page'
 );
 
+set local role authenticated;
+set local request.jwt.claim.sub = '00000039-0000-0000-0000-000000000041';
 delete from memberships where id = '00000039-0000-0000-0000-000000000053';
+reset role;
 select is(
   (select count(*)::int from memberships where id = '00000039-0000-0000-0000-000000000053'),
   1,
   'a property admin on Property A cannot remove a membership on unrelated Property B'
 );
 
+set local role authenticated;
 set local request.jwt.claim.sub = '00000039-0000-0000-0000-000000000045';
 delete from memberships where id = '00000039-0000-0000-0000-000000000051';
+reset role;
 select is(
   (select count(*)::int from memberships where id = '00000039-0000-0000-0000-000000000051'),
   1,
