@@ -93,7 +93,7 @@ export interface ResetTeamMemberPasswordInput {
   newPassword: string
 }
 
-export interface RemoveTeamMemberInput {
+export interface ArchiveTeamMemberInput {
   membershipId: string
 }
 
