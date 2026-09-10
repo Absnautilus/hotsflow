@@ -15,6 +15,7 @@ interface MockQueryBuilder<T> extends PromiseLike<MockQueryResult<T>> {
   order: (...args: unknown[]) => MockQueryBuilder<T>
   insert: (...args: unknown[]) => MockQueryBuilder<T>
   update: (...args: unknown[]) => MockQueryBuilder<T>
+  delete: (...args: unknown[]) => MockQueryBuilder<T>
   returns: (...args: unknown[]) => MockQueryBuilder<T>
   maybeSingle: () => Promise<MockQueryResult<T>>
   single: () => Promise<MockQueryResult<T>>
@@ -34,6 +35,7 @@ export function mockQueryBuilder<T>(result: MockQueryResult<T>): MockQueryBuilde
     order: vi.fn(() => builder),
     insert: vi.fn(() => builder),
     update: vi.fn(() => builder),
+    delete: vi.fn(() => builder),
     returns: vi.fn(() => builder),
     maybeSingle: vi.fn(() => Promise.resolve(result)),
     single: vi.fn(() => Promise.resolve(result)),
