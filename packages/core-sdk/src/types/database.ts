@@ -506,6 +506,10 @@ export interface Database {
         Args: { p_session_id: string; p_property_id: string; p_min_level: number }
         Returns: boolean
       }
+      resolve_staff_login_identifier: {
+        Args: { p_username: string; p_ip?: string | null }
+        Returns: string[]
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

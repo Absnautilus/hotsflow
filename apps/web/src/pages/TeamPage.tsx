@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { CoreRole, JobTitle, TeamMember } from '@hotsflow/core-sdk'
-import { BriefcaseBusiness, KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
+import { BriefcaseBusiness, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import { PasswordField } from '../components/PasswordField'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -31,7 +31,20 @@ export function TeamPage() {
   const [jobEditor, setJobEditor] = useState<JobTitle | 'new' | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [grantingId, setGrantingId] = useState<string | null>(null)
   const [confirmDialog, confirm] = useConfirm()
+  const housekeepingEntitled = runtime.entitlements.some((item) => item.enabled && item.slug === 'guest_requests')
+
+  async function onGrantHousekeeping(member: TeamMember) {
+    setGrantingId(member.membership.id)
+    try {
+      await core.grantHousekeepingAccess({ membershipId: member.membership.id })
+    } catch (cause) {
+      setError(readableError(cause))
+    } finally {
+      setGrantingId(null)
+    }
+  }
 
   async function onToggleAccess(member: TeamMember) {
     if (!property) return
@@ -39,7 +52,7 @@ export function TeamPage() {
     setTogglingId(member.membership.id)
     try {
       await core.updateTeamMember({ membershipId: member.membership.id, profileId: member.profile.id, propertyId: property.id, membershipStatus: next })
-      await loadTeam()
+      await loadTeam({ silent: true })
     } catch (cause) {
       setError(readableError(cause))
     } finally {
@@ -57,7 +70,7 @@ export function TeamPage() {
     setRemovingId(member.membership.id)
     try {
       await core.archiveTeamMember({ membershipId: member.membership.id })
-      await loadTeam()
+      await loadTeam({ silent: true })
     } catch (cause) {
       setError(readableError(cause))
     } finally {
@@ -65,9 +78,15 @@ export function TeamPage() {
     }
   }
 
-  const loadTeam = useCallback(async () => {
+  // silent=true skips the loading flag: used after a mutation (toggle,
+  // create, remove, job title change...) refreshes the list in place
+  // instead of blanking the whole table and showing "Caricamento…" again,
+  // which felt like the page lagging on every single click. Only the very
+  // first load, and the error-banner's own retry, still show it.
+  const loadTeam = useCallback(async (options?: { silent?: boolean }) => {
     if (!property) return
-    setLoading(true); setError(null)
+    if (!options?.silent) setLoading(true)
+    setError(null)
     try {
       const [members, roles, jobTitles, canManage] = await Promise.all([
         core.getTeamMembers(property.id), core.getPropertyRoles(), core.getJobTitles(property.id),
@@ -75,7 +94,7 @@ export function TeamPage() {
       ])
       setTeam({ members, roles, jobTitles, canManage })
     } catch (cause) { setError(readableError(cause)) }
-    finally { setLoading(false) }
+    finally { if (!options?.silent) setLoading(false) }
   }, [property, runtime.hasPermission])
 
   useEffect(() => { void loadTeam() }, [loadTeam])
@@ -117,7 +136,10 @@ export function TeamPage() {
             return (
             <div className="team-row" role="row" key={member.membership.id}>
               <span className="team-person" role="cell"><span className="mini-avatar">{initials(member.profile.fullName)}</span><strong>{member.profile.fullName}</strong></span>
-              <span role="cell">{roleLabel(member.role.slug, member.role.displayName)}</span>
+              <span role="cell">
+                {roleLabel(member.role.slug, member.role.displayName)}
+                {member.membership.username ? <><br /><small className="muted">{member.membership.username}</small></> : null}
+              </span>
               <span role="cell" className={member.jobTitle ? '' : 'muted'}>{member.jobTitle?.name ?? 'Da assegnare'}</span>
               <span role="cell" className="team-status-cell">
                 <Switch
@@ -134,6 +156,18 @@ export function TeamPage() {
                     <button className="row-action" type="button" onClick={() => setEditing(member)} aria-label={`Modifica ${member.profile.fullName}`}><Pencil size={15} /></button>
                     {member.membership.username ? (
                       <button className="row-action" type="button" onClick={() => setResettingPassword(member)} aria-label={`Reimposta pin di ${member.profile.fullName}`}><KeyRound size={15} /></button>
+                    ) : null}
+                    {housekeepingEntitled && !orgWide ? (
+                      <button
+                        className="row-action"
+                        type="button"
+                        onClick={() => onGrantHousekeeping(member)}
+                        disabled={grantingId === member.membership.id}
+                        aria-label={`Concedi accesso a Housekeeping a ${member.profile.fullName}`}
+                        title="Concedi accesso a Housekeeping"
+                      >
+                        <Sparkles size={15} />
+                      </button>
                     ) : null}
                     <button
                       className="row-action danger"
@@ -165,13 +199,13 @@ export function TeamPage() {
             : <div className="job-role-chip active" key={job.id}><BriefcaseBusiness size={15} /><span>{job.name}</span></div>)}
           {team.jobTitles.filter((job) => job.active).length === 0 ? <span className="muted">Nessuna mansione attiva.</span> : null}
         </div>
-        {team.canManage ? <SuggestedJobs existing={team.jobTitles} propertyId={property?.id ?? ''} onChanged={loadTeam} /> : null}
+        {team.canManage ? <SuggestedJobs existing={team.jobTitles} propertyId={property?.id ?? ''} onChanged={() => loadTeam({ silent: true })} /> : null}
       </section>
 
-      <CreateProfileModal open={createOpen} propertyId={property?.id ?? ''} roles={assignableRoles} jobTitles={team.jobTitles.filter((job) => job.active)} onClose={() => setCreateOpen(false)} onCreated={loadTeam} />
-      <EditMemberModal member={editing} roles={assignableRoles} jobTitles={team.jobTitles.filter((job) => job.active)} currentProfileId={runtime.profile?.id ?? ''} propertyId={property?.id ?? ''} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await loadTeam() }} />
+      <CreateProfileModal open={createOpen} propertyId={property?.id ?? ''} roles={assignableRoles} jobTitles={team.jobTitles.filter((job) => job.active)} onClose={() => setCreateOpen(false)} onCreated={() => loadTeam({ silent: true })} />
+      <EditMemberModal member={editing} roles={assignableRoles} jobTitles={team.jobTitles.filter((job) => job.active)} currentProfileId={runtime.profile?.id ?? ''} propertyId={property?.id ?? ''} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await loadTeam({ silent: true }) }} />
       <ResetPasswordModal member={resettingPassword} onClose={() => setResettingPassword(null)} />
-      <JobModal job={jobEditor} propertyId={property?.id ?? ''} onClose={() => setJobEditor(null)} onSaved={async () => { setJobEditor(null); await loadTeam() }} />
+      <JobModal job={jobEditor} propertyId={property?.id ?? ''} onClose={() => setJobEditor(null)} onSaved={async () => { setJobEditor(null); await loadTeam({ silent: true }) }} />
       {confirmDialog}
     </div>
   )
@@ -183,7 +217,7 @@ function CreateProfileModal({ open, propertyId, roles, jobTitles, onClose, onCre
   const [error, setError] = useState<string | null>(null)
   const [roleId, setRoleId] = useState('')
   const [jobId, setJobId] = useState('')
-  const [created, setCreated] = useState<{ loginIdentifier: string; password: string } | null>(null)
+  const [created, setCreated] = useState<{ username: string; password: string } | null>(null)
   useEffect(() => { if (open) { setMode('email'); setSaving(false); setError(null); setRoleId(''); setJobId(''); setCreated(null) } }, [open])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -205,18 +239,19 @@ function CreateProfileModal({ open, propertyId, roles, jobTitles, onClose, onCre
     const password = String(form.get('password'))
     const passwordConfirm = String(form.get('passwordConfirm'))
     if (password !== passwordConfirm) { setError('Le due password non coincidono.'); return }
+    const username = String(form.get('username'))
     setSaving(true); setError(null)
     try {
-      const result = await core.createTeamMemberWithCredentials({ propertyId, fullName, username: String(form.get('username')), password, roleId, jobTitleId: jobId || null })
+      await core.createTeamMemberWithCredentials({ propertyId, fullName, username, password, roleId, jobTitleId: jobId || null })
       await onCreated()
-      setCreated({ loginIdentifier: result.loginIdentifier, password })
+      setCreated({ username, password })
     } catch (cause) { setError(readableError(cause)); setSaving(false) }
   }
 
   if (created) {
     return <Modal open={open} title="Profilo creato" description="Comunica queste credenziali alla persona: non verranno mostrate di nuovo." onClose={onClose} footer={<button className="btn btn-primary" type="button" onClick={onClose}>Chiudi</button>}>
       <div className="modal-form">
-        <Field label="Identificativo di accesso"><input readOnly value={created.loginIdentifier} onFocus={(event) => event.currentTarget.select()} /></Field>
+        <Field label="Identificativo di accesso"><input readOnly value={created.username} onFocus={(event) => event.currentTarget.select()} /></Field>
         <Field label="Password"><input readOnly value={created.password} onFocus={(event) => event.currentTarget.select()} /></Field>
       </div>
     </Modal>
@@ -352,4 +387,4 @@ function SuggestedJobs({ existing, propertyId, onChanged }: { existing: JobTitle
 function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) { return <label className="form-field" htmlFor={htmlFor}><span>{label}</span>{children}</label> }
 function initials(name: string) { return name.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase() }
 function roleLabel(slug: string, fallback: string) { return ({ organization_admin: 'Admin organizzazione', property_admin: 'Admin struttura', manager: 'Manager', receptionist: 'Operatore' } as Record<string, string>)[slug] ?? fallback }
-function readableError(cause: unknown) { const message = cause instanceof Error ? cause.message : ''; if (/username/i.test(message)) return 'Username già in uso in questa struttura.'; if (/already|exists|409/i.test(message)) return 'Esiste già un account con questa email.'; if (/permission|forbidden|42501/i.test(message)) return 'Non hai i permessi necessari per questa operazione.'; return 'Operazione non riuscita. Riprova.' }
+function readableError(cause: unknown) { const message = cause instanceof Error ? cause.message : ''; if (/profile_exists_at_different_hotel/i.test(message)) return 'Questa persona ha già un profilo Housekeeping su un’altra struttura: non è possibile averne due.'; if (/property_not_mapped/i.test(message)) return 'Questa struttura non è ancora collegata a Housekeeping.'; if (/username/i.test(message)) return 'Username già in uso in questa struttura.'; if (/already|exists|409/i.test(message)) return 'Esiste già un account con questa email.'; if (/permission|forbidden|42501/i.test(message)) return 'Non hai i permessi necessari per questa operazione.'; return 'Operazione non riuscita. Riprova.' }

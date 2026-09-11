@@ -21,7 +21,35 @@ export function LoginScreen() {
     setPending(true)
     setError(null)
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    const typed = email.trim()
+
+    // A credentials-based team member only ever sees/types their plain
+    // username (create-team-member-credentials's own design intent), never
+    // the synthetic auth.users email it's derived from -- resolve it here
+    // rather than asking them to type an address they were never shown in
+    // full. A normal invited email (has an "@") skips resolution entirely.
+    let loginEmail = typed
+    if (!typed.includes('@')) {
+      const { data: identifiers, error: resolveError } = await supabase.rpc('resolve_staff_login_identifier', {
+        p_username: typed.toLowerCase(),
+      })
+      if (resolveError || !identifiers || identifiers.length === 0) {
+        // Same message as a real wrong-password attempt below -- a bare
+        // username that matches nothing must not be distinguishable from
+        // one that does but has the wrong password.
+        setError('Email o password non corretti.')
+        setPending(false)
+        return
+      }
+      if (identifiers.length > 1) {
+        setError('Il tuo nome utente esiste in più strutture. Usa l’indirizzo completo fornito alla creazione dell’account, oppure contatta l’amministratore.')
+        setPending(false)
+        return
+      }
+      loginEmail = identifiers[0]
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
 
     if (signInError) {
       setError(signInError.message === 'Invalid login credentials' ? 'Email o password non corretti.' : 'Accesso non riuscito. Riprova.')

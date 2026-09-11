@@ -10,6 +10,7 @@ import type {
   Membership,
   Profile,
   ArchiveTeamMemberInput,
+  GrantHousekeepingAccessInput,
   ResetTeamMemberPasswordInput,
   TeamMember,
   UpdateTeamMemberInput,
@@ -146,6 +147,11 @@ export async function createTeamMemberWithCredentials(client: SupabaseClient<Dat
 
 export async function resetTeamMemberPassword(client: SupabaseClient<Database>, input: ResetTeamMemberPasswordInput): Promise<void> {
   const { error } = await client.functions.invoke('reset-team-member-password', { body: input })
+  if (error) throw error
+}
+
+export async function grantHousekeepingAccess(client: SupabaseClient<Database>, input: GrantHousekeepingAccessInput): Promise<void> {
+  const { error } = await client.functions.invoke('grant-housekeeping-access', { body: input })
   if (error) throw error
 }
 
