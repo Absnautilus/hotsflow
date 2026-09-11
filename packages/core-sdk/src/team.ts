@@ -134,25 +134,48 @@ export async function updateJobTitle(client: SupabaseClient<Database>, id: strin
   if (!data) throw new Error('job_title_update_not_applied')
 }
 
+// client.functions.invoke()'s error on a non-2xx response is a
+// FunctionsHttpError whose own .message is always the fixed string "Edge
+// Function returned a non-2xx status code" -- the function's actual JSON
+// error body (e.g. { error: "property_not_mapped" }) lives on .context,
+// the raw Response, unread by default. Every caller here matches specific
+// error codes out of the thrown message (see apps/web's readableError()),
+// so surface the body's `error` field as the message instead of the
+// library's generic one.
+async function invokeErrorMessage(error: unknown): Promise<Error> {
+  const context = (error as { context?: unknown } | null)?.context
+  if (context instanceof Response) {
+    try {
+      const body = await context.clone().json()
+      if (body && typeof (body as { error?: unknown }).error === 'string') {
+        return new Error((body as { error: string }).error)
+      }
+    } catch {
+      // response body wasn't JSON (or already consumed) -- fall through
+    }
+  }
+  return error instanceof Error ? error : new Error(String(error))
+}
+
 export async function inviteTeamMember(client: SupabaseClient<Database>, input: InviteTeamMemberInput): Promise<void> {
   const { error } = await client.functions.invoke('invite-team-member', { body: input })
-  if (error) throw error
+  if (error) throw await invokeErrorMessage(error)
 }
 
 export async function createTeamMemberWithCredentials(client: SupabaseClient<Database>, input: CreateTeamMemberWithCredentialsInput): Promise<CreateTeamMemberWithCredentialsResult> {
   const { data, error } = await client.functions.invoke('create-team-member-credentials', { body: input })
-  if (error) throw error
+  if (error) throw await invokeErrorMessage(error)
   return data as CreateTeamMemberWithCredentialsResult
 }
 
 export async function resetTeamMemberPassword(client: SupabaseClient<Database>, input: ResetTeamMemberPasswordInput): Promise<void> {
   const { error } = await client.functions.invoke('reset-team-member-password', { body: input })
-  if (error) throw error
+  if (error) throw await invokeErrorMessage(error)
 }
 
 export async function grantHousekeepingAccess(client: SupabaseClient<Database>, input: GrantHousekeepingAccessInput): Promise<void> {
   const { error } = await client.functions.invoke('grant-housekeeping-access', { body: input })
-  if (error) throw error
+  if (error) throw await invokeErrorMessage(error)
 }
 
 // Archives a direct, property-scoped membership -- archive_team_member()
