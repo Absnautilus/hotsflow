@@ -66,7 +66,14 @@ Deno.serve(async (request: Request) => {
     })
     if (permissionError || !canManage) return json({ error: 'forbidden' }, 403)
 
-    const { data: hotelId, error: hotelError } = await admin.rpc('guest_requests_legacy_hotel_for_property', {
+    // caller, not admin -- guest_requests_legacy_hotel_for_property is
+    // SECURITY DEFINER but still calls has_property_access() internally,
+    // which reads auth.uid() from the calling role's own JWT. The
+    // service-role admin client carries no user JWT, so auth.uid() is
+    // always null there and the RPC always returns null regardless of
+    // whether a real mapping/entitlement exists -- confirmed live in
+    // production (property_not_mapped on a property that *is* mapped).
+    const { data: hotelId, error: hotelError } = await caller.rpc('guest_requests_legacy_hotel_for_property', {
       p_property_id: membership.property_id,
     })
     if (hotelError) return json({ error: 'lookup_failed' }, 500)
