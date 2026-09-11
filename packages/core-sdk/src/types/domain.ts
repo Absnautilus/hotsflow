@@ -93,6 +93,10 @@ export interface ResetTeamMemberPasswordInput {
   newPassword: string
 }
 
+export interface GrantHousekeepingAccessInput {
+  membershipId: string
+}
+
 export interface ArchiveTeamMemberInput {
   membershipId: string
 }
