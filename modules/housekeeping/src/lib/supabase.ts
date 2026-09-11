@@ -1,12 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/env'
+import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
 
 let injectedClient: SupabaseClient | null = null
 let standaloneClient: SupabaseClient | null = null
 
 function getClient(): SupabaseClient {
   if (injectedClient) return injectedClient
-  standaloneClient ??= createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  standaloneClient ??= createClient(getSupabaseUrl(), getSupabaseAnonKey())
   return standaloneClient
 }
 
