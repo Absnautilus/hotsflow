@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { CoreRole, JobTitle, TeamMember } from '@hotsflow/core-sdk'
-import { BriefcaseBusiness, KeyRound, Pencil, Plus, ShieldCheck, Sparkles, Trash2, UserPlus, Users } from 'lucide-react'
+import { Boxes, BriefcaseBusiness, KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import { PasswordField } from '../components/PasswordField'
 import { useConfirm } from '../components/ConfirmDialog'
@@ -163,7 +163,7 @@ export function TeamPage() {
                         aria-label={`Moduli di ${member.profile.fullName}`}
                         title="Moduli"
                       >
-                        <Sparkles size={15} />
+                        <Boxes size={15} />
                       </button>
                     ) : <span className="row-action-slot" aria-hidden="true" />}
                     <button
@@ -332,15 +332,23 @@ function ModulesModal({ member, onClose }: { member: TeamMember | null; onClose:
       .finally(() => setLoading(false))
   }, [member])
 
+  // Optimistic: the switch flips immediately on click instead of waiting
+  // for grant-housekeeping-access's own multi-step round trip (several
+  // sequential Postgres calls inside that one Edge Function invocation),
+  // which read as "lentissimo" with the switch stuck disabled -- and
+  // disabled is exactly what shows the browser's not-allowed cursor for
+  // that whole wait. Reverts only if the call actually fails.
   async function onToggle() {
-    if (!member || status === null) return
+    if (!member || status === null || saving) return
+    const next = !status
     setSaving(true)
     setError(null)
+    setStatus(next)
     try {
-      if (status) await core.revokeHousekeepingAccess({ membershipId: member.membership.id })
-      else await core.grantHousekeepingAccess({ membershipId: member.membership.id })
-      setStatus(!status)
+      if (next) await core.grantHousekeepingAccess({ membershipId: member.membership.id })
+      else await core.revokeHousekeepingAccess({ membershipId: member.membership.id })
     } catch (cause) {
+      setStatus(!next)
       setError(readableError(cause))
     } finally {
       setSaving(false)
@@ -351,7 +359,7 @@ function ModulesModal({ member, onClose }: { member: TeamMember | null; onClose:
     {loading ? <p className="muted">Caricamento…</p> : (
       <div className="module-access-row">
         <span>Housekeeping</span>
-        <Switch checked={Boolean(status)} onChange={() => void onToggle()} disabled={saving || status === null} aria-label="Accesso a Housekeeping" />
+        <Switch checked={Boolean(status)} onChange={() => void onToggle()} disabled={status === null} aria-label="Accesso a Housekeeping" />
       </div>
     )}
     {error ? <p className="form-error" role="alert">{error}</p> : null}
