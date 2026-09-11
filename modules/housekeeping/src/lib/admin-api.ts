@@ -77,15 +77,6 @@ export async function setStaffActive(id: string, active: boolean): Promise<void>
   if (!data) throw new Error('staff_active_update_not_applied')
 }
 
-export async function createStaffAccount(
-  input:
-    | { name: string; role: 'admin'; email: string; password: string; hotelId: string }
-    | { name: string; role: 'operatore'; username: string; pin: string; department: StaffDepartment; hotelId?: string },
-): Promise<void> {
-  const { error } = await supabase.functions.invoke('create-staff-account', { body: input })
-  if (error) throw error
-}
-
 export interface RequestTypeAdmin {
   id: string
   category_id: string
