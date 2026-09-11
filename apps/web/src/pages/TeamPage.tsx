@@ -32,13 +32,16 @@ export function TeamPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [grantingId, setGrantingId] = useState<string | null>(null)
+  const [grantSuccessMessage, setGrantSuccessMessage] = useState<string | null>(null)
   const [confirmDialog, confirm] = useConfirm()
   const housekeepingEntitled = runtime.entitlements.some((item) => item.enabled && item.slug === 'guest_requests')
 
   async function onGrantHousekeeping(member: TeamMember) {
     setGrantingId(member.membership.id)
+    setGrantSuccessMessage(null)
     try {
       await core.grantHousekeepingAccess({ membershipId: member.membership.id })
+      setGrantSuccessMessage(`Accesso a Housekeeping concesso a ${member.profile.fullName}.`)
     } catch (cause) {
       setError(readableError(cause))
     } finally {
@@ -125,6 +128,7 @@ export function TeamPage() {
       </section>
 
       {error ? <div className="shell-alert error" role="alert">{error}<button type="button" onClick={() => void loadTeam()}>Riprova</button></div> : null}
+      {grantSuccessMessage ? <div className="shell-alert success" role="status">{grantSuccessMessage}<button type="button" onClick={() => setGrantSuccessMessage(null)}>Chiudi</button></div> : null}
 
       <section className="shell-card">
         <div className="section-heading split">
@@ -165,7 +169,7 @@ export function TeamPage() {
                     <button className="row-action" type="button" onClick={() => setEditing(member)} aria-label={`Modifica ${member.profile.fullName}`}><Pencil size={15} /></button>
                     {member.membership.username ? (
                       <button className="row-action" type="button" onClick={() => setResettingPassword(member)} aria-label={`Reimposta pin di ${member.profile.fullName}`}><KeyRound size={15} /></button>
-                    ) : null}
+                    ) : <span className="row-action-slot" aria-hidden="true" />}
                     {housekeepingEntitled && !orgWide ? (
                       <button
                         className="row-action"
@@ -177,7 +181,7 @@ export function TeamPage() {
                       >
                         <Sparkles size={15} />
                       </button>
-                    ) : null}
+                    ) : <span className="row-action-slot" aria-hidden="true" />}
                     <button
                       className="row-action danger"
                       type="button"
