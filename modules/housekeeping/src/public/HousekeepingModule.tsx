@@ -3,7 +3,7 @@ import { LocaleProvider } from '@/lib/i18n/locale-context'
 import { UiScaleProvider } from '@/lib/ui-scale-context'
 import { configureSupabaseClient } from '@/lib/supabase'
 import { StaffApp } from '@/staff/staff-app'
-import './embedded.css'
+import '../embedded.css'
 
 export interface HousekeepingCapabilities {
   /** Access to stays management inside Housekeeping. */

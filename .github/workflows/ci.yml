@@ -17,9 +17,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # modules/housekeeping publishes a real dist/ (Vite lib build); apps/web
+      # resolves @hotsflow/housekeeping-module against that dist/, so it must
+      # exist before typecheck/test run against apps/web, not only at the end.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
 
   # These three run against the workspace/dependency graph, not any one
   # workspace's own code, so they get their own jobs rather than steps
