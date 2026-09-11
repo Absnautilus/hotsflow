@@ -45,9 +45,15 @@ Deno.serve(async (request: Request) => {
     const { data: userData, error: userError } = await caller.auth.getUser()
     if (userError || !userData.user) return json({ error: 'invalid_session' }, 401)
 
+    // profiles!profile_id -- memberships has two FKs into profiles
+    // (profile_id and invited_by), so the plain embed profiles(full_name)
+    // is ambiguous to PostgREST and errors out (silently mapped below to
+    // membership_not_found, indistinguishable from a genuinely missing
+    // membership until this comment was written -- confirmed live against
+    // production, not assumed).
     const { data: membership, error: membershipError } = await admin
       .from('memberships')
-      .select('profile_id, property_id, profiles(full_name)')
+      .select('profile_id, property_id, profiles!profile_id(full_name)')
       .eq('id', membershipId)
       .maybeSingle()
     if (membershipError || !membership || !membership.property_id) return json({ error: 'membership_not_found' }, 404)
