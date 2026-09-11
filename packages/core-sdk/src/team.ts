@@ -11,6 +11,7 @@ import type {
   Profile,
   ArchiveTeamMemberInput,
   GrantHousekeepingAccessInput,
+  RevokeHousekeepingAccessInput,
   ResetTeamMemberPasswordInput,
   TeamMember,
   UpdateTeamMemberInput,
@@ -174,8 +175,24 @@ export async function resetTeamMemberPassword(client: SupabaseClient<Database>, 
 }
 
 export async function grantHousekeepingAccess(client: SupabaseClient<Database>, input: GrantHousekeepingAccessInput): Promise<void> {
-  const { error } = await client.functions.invoke('grant-housekeeping-access', { body: input })
+  const { error } = await client.functions.invoke('grant-housekeeping-access', { body: { ...input, action: 'grant' } })
   if (error) throw await invokeErrorMessage(error)
+}
+
+export async function revokeHousekeepingAccess(client: SupabaseClient<Database>, input: RevokeHousekeepingAccessInput): Promise<void> {
+  const { error } = await client.functions.invoke('grant-housekeeping-access', { body: { ...input, action: 'revoke' } })
+  if (error) throw await invokeErrorMessage(error)
+}
+
+// Read-only companion to grant/revokeHousekeepingAccess -- lets a caller
+// with core.staff.manage see whether a membership currently has an active
+// Housekeeping profile before rendering a toggle, instead of guessing.
+// Calls guest_requests_staff_access_status() directly (a plain RPC, not
+// the Edge Function) since it's pure read and needs no service-role step.
+export async function getHousekeepingAccessStatus(client: SupabaseClient<Database>, membershipId: string): Promise<boolean> {
+  const { data, error } = await client.rpc('guest_requests_staff_access_status', { p_membership_id: membershipId })
+  if (error) throw error
+  return data ?? false
 }
 
 // Archives a direct, property-scoped membership -- archive_team_member()

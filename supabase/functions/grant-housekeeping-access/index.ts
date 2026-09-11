@@ -7,16 +7,18 @@ const corsHeaders = {
 
 type GrantBody = {
   membershipId?: unknown
+  action?: unknown
 }
 
-// Bridges a Hotsflow membership into Housekeeping's own legacy staff_profiles
+// Bridges (action: 'grant', the default) or removes (action: 'revoke') a
+// Hotsflow membership's row in Housekeeping's own legacy staff_profiles
 // table -- the "transitional compatibility gate" described in
 // fase2-guest-requests-migration.md was backfilled once, for staff who
 // already existed at migration time, and never extended to anyone created
 // afterward through Team's own credentials/invite flow. Explicit and
 // per-member on purpose (not automatic on every team-member creation): not
 // every team member does housekeeping work, and an admin should decide who
-// actually needs it.
+// actually needs it -- toggled from the Modules popup on the Team page.
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -28,6 +30,7 @@ Deno.serve(async (request: Request) => {
     const body = await request.json() as GrantBody
     const membershipId = readUuid(body.membershipId)
     if (!membershipId) return json({ error: 'invalid_input' }, 400)
+    const action = body.action === 'revoke' ? 'revoke' : 'grant'
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
@@ -85,6 +88,19 @@ Deno.serve(async (request: Request) => {
       .eq('auth_user_id', membership.profile_id)
       .maybeSingle()
     if (existingError) return json({ error: 'lookup_failed' }, 500)
+
+    if (action === 'revoke') {
+      // No row at all -- the desired end state (no access) already holds;
+      // idempotent, matching grant's own reactivate-if-exists idempotency.
+      if (!existing) return json({ ok: true }, 200)
+      if (existing.hotel_id !== hotelId) return json({ error: 'profile_exists_at_different_hotel' }, 409)
+      const { error: revokeError } = await admin
+        .from('staff_profiles')
+        .update({ active: false })
+        .eq('id', existing.id)
+      if (revokeError) return json({ error: 'revoke_failed' }, 400)
+      return json({ ok: true }, 200)
+    }
 
     if (existing) {
       if (existing.hotel_id !== hotelId) return json({ error: 'profile_exists_at_different_hotel' }, 409)

@@ -1,12 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from './types/database'
-import type { ArchiveTeamMemberInput, CoreRole, CreateTeamMemberWithCredentialsInput, CreateTeamMemberWithCredentialsResult, GrantHousekeepingAccessInput, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, ResetTeamMemberPasswordInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
+import type { ArchiveTeamMemberInput, CoreRole, CreateTeamMemberWithCredentialsInput, CreateTeamMemberWithCredentialsResult, GrantHousekeepingAccessInput, InviteTeamMemberInput, JobTitle, Membership, ModuleEntitlement, Profile, Property, ResetTeamMemberPasswordInput, RevokeHousekeepingAccessInput, TeamMember, UpdateTeamMemberInput } from './types/domain'
 import { getCurrentProfile, updateCurrentProfile } from './profile'
 import { getAccessibleProperties, getMembership, updateProperty } from './memberships'
 import { hasPermission } from './permissions'
 import { getEnabledModules } from './modules'
 import { getGuestRequestsLegacyHotelId } from './guestRequests'
-import { archiveTeamMember, createJobTitle, createTeamMemberWithCredentials, getJobTitles, getPropertyRoles, getTeamMembers, grantHousekeepingAccess, inviteTeamMember, resetTeamMemberPassword, updateJobTitle, updateTeamMember } from './team'
+import { archiveTeamMember, createJobTitle, createTeamMemberWithCredentials, getHousekeepingAccessStatus, getJobTitles, getPropertyRoles, getTeamMembers, grantHousekeepingAccess, inviteTeamMember, resetTeamMemberPassword, revokeHousekeepingAccess, updateJobTitle, updateTeamMember } from './team'
 
 export interface CoreClient {
   // Escape hatch for a module that needs the raw Supabase client (e.g. to
@@ -28,6 +28,8 @@ export interface CoreClient {
   createTeamMemberWithCredentials: (input: CreateTeamMemberWithCredentialsInput) => Promise<CreateTeamMemberWithCredentialsResult>
   resetTeamMemberPassword: (input: ResetTeamMemberPasswordInput) => Promise<void>
   grantHousekeepingAccess: (input: GrantHousekeepingAccessInput) => Promise<void>
+  revokeHousekeepingAccess: (input: RevokeHousekeepingAccessInput) => Promise<void>
+  getHousekeepingAccessStatus: (membershipId: string) => Promise<boolean>
   updateTeamMember: (input: UpdateTeamMemberInput) => Promise<void>
   archiveTeamMember: (input: ArchiveTeamMemberInput) => Promise<void>
   updateCurrentProfile: (changes: { fullName: string; avatarUrl?: string | null }) => Promise<Profile>
@@ -53,6 +55,8 @@ export function createCoreClient(supabaseUrl: string, supabaseAnonKey: string): 
     createTeamMemberWithCredentials: (input) => createTeamMemberWithCredentials(raw, input),
     resetTeamMemberPassword: (input) => resetTeamMemberPassword(raw, input),
     grantHousekeepingAccess: (input) => grantHousekeepingAccess(raw, input),
+    revokeHousekeepingAccess: (input) => revokeHousekeepingAccess(raw, input),
+    getHousekeepingAccessStatus: (membershipId) => getHousekeepingAccessStatus(raw, membershipId),
     updateTeamMember: (input) => updateTeamMember(raw, input),
     archiveTeamMember: (input) => archiveTeamMember(raw, input),
     updateCurrentProfile: (changes) => updateCurrentProfile(raw, changes),

@@ -106,6 +106,7 @@ body.modal-open { overflow: hidden; }
 .modal-footer .push-left { margin-right: auto; }
 .btn-danger { color: var(--red-ink); background: var(--red-bg); border: 1px solid rgba(178,58,58,.16); }
 .modal-form { display: grid; gap: 15px; }
+.module-access-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
 .form-field { display: grid; gap: 6px; }
 .form-field > span { color: var(--muted); font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .form-field input, .form-field select { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }

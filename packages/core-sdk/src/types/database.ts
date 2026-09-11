@@ -510,6 +510,10 @@ export interface Database {
         Args: { p_username: string; p_ip?: string | null }
         Returns: string[]
       }
+      guest_requests_staff_access_status: {
+        Args: { p_membership_id: string }
+        Returns: boolean
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

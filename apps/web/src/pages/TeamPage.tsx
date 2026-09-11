@@ -31,23 +31,9 @@ export function TeamPage() {
   const [jobEditor, setJobEditor] = useState<JobTitle | 'new' | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
-  const [grantingId, setGrantingId] = useState<string | null>(null)
-  const [grantSuccessMessage, setGrantSuccessMessage] = useState<string | null>(null)
+  const [modulesFor, setModulesFor] = useState<TeamMember | null>(null)
   const [confirmDialog, confirm] = useConfirm()
   const housekeepingEntitled = runtime.entitlements.some((item) => item.enabled && item.slug === 'guest_requests')
-
-  async function onGrantHousekeeping(member: TeamMember) {
-    setGrantingId(member.membership.id)
-    setGrantSuccessMessage(null)
-    try {
-      await core.grantHousekeepingAccess({ membershipId: member.membership.id })
-      setGrantSuccessMessage(`Accesso a Housekeeping concesso a ${member.profile.fullName}.`)
-    } catch (cause) {
-      setError(readableError(cause))
-    } finally {
-      setGrantingId(null)
-    }
-  }
 
   async function onToggleAccess(member: TeamMember) {
     if (!property) return
@@ -128,7 +114,6 @@ export function TeamPage() {
       </section>
 
       {error ? <div className="shell-alert error" role="alert">{error}<button type="button" onClick={() => void loadTeam()}>Riprova</button></div> : null}
-      {grantSuccessMessage ? <div className="shell-alert success" role="status">{grantSuccessMessage}<button type="button" onClick={() => setGrantSuccessMessage(null)}>Chiudi</button></div> : null}
 
       <section className="shell-card">
         <div className="section-heading split">
@@ -174,10 +159,9 @@ export function TeamPage() {
                       <button
                         className="row-action"
                         type="button"
-                        onClick={() => onGrantHousekeeping(member)}
-                        disabled={grantingId === member.membership.id}
-                        aria-label={`Concedi accesso a Housekeeping a ${member.profile.fullName}`}
-                        title="Concedi accesso a Housekeeping"
+                        onClick={() => setModulesFor(member)}
+                        aria-label={`Moduli di ${member.profile.fullName}`}
+                        title="Moduli"
                       >
                         <Sparkles size={15} />
                       </button>
@@ -219,6 +203,7 @@ export function TeamPage() {
       <EditMemberModal member={editing} roles={assignableRoles} jobTitles={team.jobTitles.filter((job) => job.active)} currentProfileId={runtime.profile?.id ?? ''} propertyId={property?.id ?? ''} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await loadTeam({ silent: true }) }} />
       <ResetPasswordModal member={resettingPassword} onClose={() => setResettingPassword(null)} />
       <JobModal job={jobEditor} propertyId={property?.id ?? ''} onClose={() => setJobEditor(null)} onSaved={async () => { setJobEditor(null); await loadTeam({ silent: true }) }} />
+      <ModulesModal member={modulesFor} onClose={() => setModulesFor(null)} />
       {confirmDialog}
     </div>
   )
@@ -321,6 +306,55 @@ function ResetPasswordModal({ member, onClose }: { member: TeamMember | null; on
       <Field label="Conferma nuova password"><PasswordField name="passwordConfirm" required minLength={8} maxLength={72} autoComplete="new-password" /></Field>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </form> : null}
+  </Modal>
+}
+
+// Housekeeping is the only module today wired through this per-member
+// compatibility grant (see grant-housekeeping-access's own header) --
+// other Core-native modules don't need this dance at all, since their
+// authorization already flows through memberships/roles/permissions
+// directly. This list is written as one row now, but the modal itself
+// (status fetched per module, toggle calls grant/revoke) is the shape a
+// second module would extend, not a Housekeeping-only special case.
+function ModulesModal({ member, onClose }: { member: TeamMember | null; onClose: () => void }) {
+  const [status, setStatus] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!member) { setStatus(null); setError(null); return }
+    setLoading(true)
+    setError(null)
+    core.getHousekeepingAccessStatus(member.membership.id)
+      .then(setStatus)
+      .catch((cause) => setError(readableError(cause)))
+      .finally(() => setLoading(false))
+  }, [member])
+
+  async function onToggle() {
+    if (!member || status === null) return
+    setSaving(true)
+    setError(null)
+    try {
+      if (status) await core.revokeHousekeepingAccess({ membershipId: member.membership.id })
+      else await core.grantHousekeepingAccess({ membershipId: member.membership.id })
+      setStatus(!status)
+    } catch (cause) {
+      setError(readableError(cause))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <Modal open={Boolean(member)} title="Moduli" description={member ? `Moduli a cui ${member.profile.fullName} ha accesso.` : undefined} onClose={onClose} footer={<button className="btn btn-primary" type="button" onClick={onClose}>Chiudi</button>}>
+    {loading ? <p className="muted">Caricamento…</p> : (
+      <div className="module-access-row">
+        <span>Housekeeping</span>
+        <Switch checked={Boolean(status)} onChange={() => void onToggle()} disabled={saving || status === null} aria-label="Accesso a Housekeeping" />
+      </div>
+    )}
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
   </Modal>
 }
 

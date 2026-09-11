@@ -97,6 +97,10 @@ export interface GrantHousekeepingAccessInput {
   membershipId: string
 }
 
+export interface RevokeHousekeepingAccessInput {
+  membershipId: string
+}
+
 export interface ArchiveTeamMemberInput {
   membershipId: string
 }
