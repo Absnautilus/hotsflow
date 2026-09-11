@@ -1,0 +1,115 @@
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-line: var(--accent-soft-line);
+
+  --color-wait-bg: var(--wait-bg);
+  --color-wait-ink: var(--wait-ink);
+  --color-wait-line: var(--wait-line);
+  --color-prog-bg: var(--prog-bg);
+  --color-prog-ink: var(--prog-ink);
+  --color-prog-line: var(--prog-line);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-ink: var(--ok-ink);
+  --color-ok-line: var(--ok-line);
+  --color-done-bg: var(--done-bg);
+  --color-done-ink: var(--done-ink);
+  --color-done-line: var(--done-line);
+  --color-bad-bg: var(--bad-bg);
+  --color-bad-ink: var(--bad-ink);
+  --color-bad-line: var(--bad-line);
+  --color-off-bg: var(--off-bg);
+  --color-off-ink: var(--off-ink);
+  --color-off-line: var(--off-line);
+  --color-terracotta-bg: var(--terracotta-bg);
+  --color-terracotta-ink: var(--terracotta-ink);
+  --color-terracotta-line: var(--terracotta-line);
+
+  --font-sans: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-head: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 2px 8px rgba(22, 24, 43, 0.05);
+  --shadow-md: 0 8px 24px rgba(22, 24, 43, 0.08);
+  --shadow-lg: 0 16px 40px rgba(22, 24, 43, 0.18);
+}
+
+/* Hotsflow design-standard-v2 tokens. They live on the module root rather
+   than :root so the embeddable bundle cannot mutate shell-owned variables. */
+.hk-root {
+  --background: #eaecf9;
+  --foreground: #16182b;
+  --muted: #767aa0;
+  --line: #e3e5f3;
+  --line-strong: #d3d6ec;
+  --surface: #ffffff;
+  --surface-2: #f4f5fc;
+
+  --accent: #9c4fc7;
+  --accent-ink: #ffffff;
+  --accent-soft: #f4e8fa;
+  --accent-soft-line: #e4c7f2;
+
+  --wait-bg: #fff1d6;
+  --wait-ink: #8a6416;
+  --wait-line: #f2dba0;
+  --prog-bg: #eaf1fe;
+  --prog-ink: #2a5fcc;
+  --prog-line: #c3d7fb;
+  --ok-bg: #dff6e8;
+  --ok-ink: #1e7a46;
+  --ok-line: #bce9ce;
+  --done-bg: #c9eedb;
+  --done-ink: #146138;
+  --done-line: #9eddbe;
+  --bad-bg: #fde8e8;
+  --bad-ink: #b23a3a;
+  --bad-line: #f3b9b9;
+  --off-bg: #edeef6;
+  --off-ink: #6b6f8a;
+  --off-line: #d8dae9;
+  --terracotta-bg: #fbe6d8;
+  --terracotta-ink: #b25a2e;
+  --terracotta-line: #efc3a4;
+
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.hk-root .admin-tab {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 165ms cubic-bezier(.4,0,.2,1), color 120ms cubic-bezier(.4,0,.2,1), box-shadow 165ms cubic-bezier(.4,0,.2,1);
+}
+
+.hk-root .admin-tab:hover {
+  color: var(--foreground);
+}
+
+.hk-root .admin-tab.active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-sm);
+}
