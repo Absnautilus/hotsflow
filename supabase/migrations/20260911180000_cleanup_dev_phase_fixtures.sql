@@ -65,6 +65,20 @@ declare
     '0bab404d-4cce-4fff-ae94-cc5fefece866', -- Farouk
     '6f3a511e-4735-461d-aa64-cb0b297af77a'  -- Francesco Breda, old native "fbreda"
   ]::uuid[];
+  -- A single real Palazzo Veneziano guest_requests row, created by the
+  -- platform owner herself while manually testing the guest app, that
+  -- ended up wired to a request_type belonging to Hotel Demo 2 instead of
+  -- her own hotel's. Confirmed by her directly as her own test data, safe
+  -- to delete -- not a real guest's request. Without removing this row
+  -- first, deleting Hotel Demo 2's request_types below fails with a
+  -- foreign key violation (guest_requests_request_type_id_fkey), since
+  -- this row sits outside demo_hotel_ids and so isn't touched by the
+  -- "delete from guest_requests where hotel_id = any(demo_hotel_ids)"
+  -- step further down. No table references guest_requests(id), so
+  -- deleting this row has no further cascading effect.
+  doomed_guest_request_ids uuid[] := array[
+    'a070348a-c225-4bf5-bda1-77385d9235dd'
+  ]::uuid[];
   bad_count int;
 begin
   if not exists (select 1 from hotels where id = '25b00bec-1602-46e9-bf52-a4913ebb5bdb') then
@@ -82,6 +96,10 @@ begin
     where accepted_by = any(doomed_staff_profile_ids);
   update guest_requests set created_by_staff = null
     where created_by_staff = any(doomed_staff_profile_ids);
+
+  -- The one real Palazzo Veneziano row identified above, wired to a demo
+  -- hotel's request_type -- must go before the request_types delete below.
+  delete from guest_requests where id = any(doomed_guest_request_ids);
 
   -- Full wipe of the three demo hotels' own data, deepest-dependency-first.
   delete from guest_requests where hotel_id = any(demo_hotel_ids);
@@ -125,6 +143,11 @@ begin
   select count(*) into bad_count from staff_profiles where id = any(doomed_staff_profile_ids);
   if bad_count <> 0 then
     raise exception 'cleanup incomplete: % of the two doomed Palazzo Veneziano staff_profiles rows still exist', bad_count;
+  end if;
+
+  select count(*) into bad_count from guest_requests where id = any(doomed_guest_request_ids);
+  if bad_count <> 0 then
+    raise exception 'cleanup incomplete: % doomed guest_requests rows still exist', bad_count;
   end if;
 
   if not exists (select 1 from staff_profiles where id = 'ac68e209-859b-464d-a3a1-b1e50a9d16e9') then
