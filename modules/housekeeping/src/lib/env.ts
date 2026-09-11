@@ -5,8 +5,21 @@ function required(name: string, value: string | undefined): string {
   return value
 }
 
-export const SUPABASE_URL = required('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL)
-export const SUPABASE_ANON_KEY = required('VITE_SUPABASE_ANON_KEY', import.meta.env.VITE_SUPABASE_ANON_KEY)
+// Integrated staff mode never reaches these -- configureSupabaseClient()
+// injects a real, already-configured client instead (see lib/supabase.ts).
+// Only the standalone-guest fallback path calls them, and only when it's
+// actually reached. Keep them lazy for the same reason getHotelId below is
+// lazy: this module's own build (a library with no .env of its own) never
+// has real values for these, so an eager top-level `export const` would
+// permanently bake in "missing" and throw on every import -- including in
+// integrated mode, which never needed a value in the first place.
+export function getSupabaseUrl(): string {
+  return required('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL)
+}
+
+export function getSupabaseAnonKey(): string {
+  return required('VITE_SUPABASE_ANON_KEY', import.meta.env.VITE_SUPABASE_ANON_KEY)
+}
 
 // Standalone guest mode still uses a single-hotel deployment, but integrated
 // staff mode receives its property/hotel scope from Hotsflow at runtime.
