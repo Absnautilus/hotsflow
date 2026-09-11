@@ -52,7 +52,16 @@ export function TeamPage() {
     setTogglingId(member.membership.id)
     try {
       await core.updateTeamMember({ membershipId: member.membership.id, profileId: member.profile.id, propertyId: property.id, membershipStatus: next })
-      await loadTeam({ silent: true })
+      // Patch the one changed row in place instead of a full loadTeam()
+      // reload (4 network calls) for a single field flip -- that reload
+      // held the switch disabled for its entire round-trip, which read as
+      // the whole page lagging on every click.
+      setTeam((current) => ({
+        ...current,
+        members: current.members.map((m) =>
+          m.membership.id === member.membership.id ? { ...m, membership: { ...m.membership, status: next } } : m,
+        ),
+      }))
     } catch (cause) {
       setError(readableError(cause))
     } finally {
