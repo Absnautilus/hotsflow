@@ -185,6 +185,7 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
   const [detailsCheckOut, setDetailsCheckOut] = useState(toLocalInputValue(stay.check_out_at))
   const [pending, setPending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [confirmDialog, confirm] = useConfirm()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [history, setHistory] = useState<StayRequest[] | null>(null)
@@ -215,6 +216,7 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
   async function run(action: () => Promise<void>): Promise<boolean> {
     setPending(true)
     setActionError(null)
+    setActionNotice(null)
     try {
       await action()
       await onChanged()
@@ -225,6 +227,16 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
     } finally {
       setPending(false)
     }
+  }
+
+  // updateCheckout's only effect on this screen is a small timestamp label
+  // update -- its real effect (cutting the guest's PIN session at the new,
+  // earlier checkout time, via stays_sync_guest_sessions) is invisible here
+  // by design. A single unconfirmed click with no feedback at all read as
+  // "non succede nulla", so this adds an explicit, if brief, confirmation.
+  async function onCheckoutNow() {
+    const ok = await run(() => updateCheckout(stay.id, new Date().toISOString()))
+    if (ok) setActionNotice(t('staff.stays.checkoutNowSuccess'))
   }
 
   async function onDeactivate() {
@@ -334,13 +346,14 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
                 icon={LogOut}
                 label={t('staff.stays.checkoutNow')}
                 disabled={pending}
-                onClick={() => run(() => updateCheckout(stay.id, new Date().toISOString()))}
+                onClick={onCheckoutNow}
               />
               <IconButton tone="danger" icon={Power} label={t('staff.stays.deactivate')} disabled={pending} onClick={onDeactivate} />
             </div>
           )}
         </div>
         {actionError && <p className="mt-2 text-xs font-semibold text-bad-ink" role="alert">{actionError}</p>}
+        {actionNotice && <p className="mt-2 text-xs font-semibold text-ok-ink" role="status">{actionNotice}</p>}
 
         {historyOpen && (
           <div className="mt-3 border-t border-line pt-3">

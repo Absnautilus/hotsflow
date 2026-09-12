@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { HousekeepingModule } from '@hotsflow/housekeeping-module'
 import '@hotsflow/housekeeping-module/style.css'
 import { supabase } from '../../core/client'
@@ -11,8 +12,33 @@ import { useHousekeepingAccess } from './useHousekeepingAccess'
 export function HousekeepingModuleGate() {
   const runtime = useModuleRuntime()
   const access = useHousekeepingAccess()
+  const propertyId = runtime.property?.id ?? null
+  const [canManage, setCanManage] = useState<boolean | null>(null)
 
-  if (access.status === 'loading') {
+  // Housekeeping's own staff_profiles.role is no longer meaningful for
+  // authorization (every Team member bridged in via grant-housekeeping-access
+  // gets role: 'admin' regardless of their real Hotsflow role -- see that
+  // function's own comment) and the module's legacy fallback for its
+  // "Gestione" tab (staff_profiles.role again) inherits the same problem
+  // whenever no capabilities prop is supplied. Resolving the real permission
+  // here, the same one grant-housekeeping-access itself checks before
+  // bridging anyone in, is what actually gates "Gestione" to admin/manager.
+  useEffect(() => {
+    if (!propertyId) return
+    let cancelled = false
+    void runtime.hasPermission('core.staff.manage')
+      .then((value) => {
+        if (!cancelled) setCanManage(value)
+      })
+      .catch(() => {
+        if (!cancelled) setCanManage(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [propertyId, runtime.hasPermission])
+
+  if (access.status === 'loading' || canManage === null) {
     return <div className="runtime-state" role="status">Caricamento Housekeeping…</div>
   }
 
@@ -48,6 +74,7 @@ export function HousekeepingModuleGate() {
       supabase={supabase}
       hotelId={access.hotelId}
       basePath="/housekeeping"
+      capabilities={{ manage: canManage, staysView: true }}
       platformStaffManagement={{
         href: '/team',
         label: 'Apri Team',
