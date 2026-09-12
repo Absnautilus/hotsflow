@@ -104,7 +104,22 @@ export function OperatorsPage({
           </thead>
           <tbody className="divide-y divide-line">
             {staff?.map((person) => {
-              const roleLabel = person.role === 'operatore' ? t(`department.${person.department ?? 'reception'}`) : t(ROLE_KEY[person.role])
+              // grant-housekeeping-access always inserts role: 'admin' for a
+              // Team-bridged member regardless of their real Hotsflow role
+              // (see that function's own comment -- Housekeeping's
+              // 'operatore' role requires a native login_username, which a
+              // Team-bridged account never has). role: 'admin' with no
+              // login_username is exactly that case today and going
+              // forward (native account creation no longer exists), so
+              // showing it as "Admin" here would misrepresent a real
+              // Hotsflow operatore. A genuine 'master' row is never
+              // produced by the bridge, so that label stays trustworthy.
+              const roleLabel =
+                person.role === 'operatore'
+                  ? t(`department.${person.department ?? 'reception'}`)
+                  : person.role === 'admin' && !person.login_username
+                    ? '—'
+                    : t(ROLE_KEY[person.role])
               // an admin can only ever touch operatori; only master can deactivate an admin,
               // and nobody deactivates a master from this screen
               const canToggle = !platformStaffManagement && (person.role === 'operatore' || (person.role === 'admin' && isMaster))
