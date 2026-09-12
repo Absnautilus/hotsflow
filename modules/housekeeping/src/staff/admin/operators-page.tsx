@@ -57,10 +57,12 @@ export function OperatorsPage({
       if (!ok) return
     }
     setError(null)
+    const next = !person.active
+    setStaff((current) => current?.map((p) => (p.id === person.id ? { ...p, active: next } : p)) ?? current)
     try {
-      await setStaffActive(person.id, !person.active)
-      await reload()
+      await setStaffActive(person.id, next)
     } catch {
+      setStaff((current) => current?.map((p) => (p.id === person.id ? { ...p, active: person.active } : p)) ?? current)
       setError(t('staff.operators.toggleError'))
     }
   }

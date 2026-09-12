@@ -3,7 +3,7 @@ import { Card, CardBody } from '@/components/ui/card'
 import { IconButton } from '@/components/ui/icon-button'
 import { Badge, StatusBadge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/field'
-import { IconCheck, IconClaim, IconGrip, IconReturn, IconTrash, IconUndo, IconX } from '@/components/ui/action-icons'
+import { ArrowDownToLine, ArrowLeft, Check, GripVertical, PackageCheck, Trash2, X } from 'lucide-react'
 import { Avatar } from '@/components/avatar'
 import { AutoText } from '@/components/auto-text'
 import { DEPARTMENTS } from '@/lib/constants'
@@ -140,9 +140,9 @@ export function RequestRow({
                 onPointerMove={onDragPointerMove}
                 onPointerUp={onDragPointerUp}
                 onPointerCancel={onDragPointerUp}
-                className="flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-full text-muted transition-colors select-none hover:bg-surface-2 hover:text-foreground active:cursor-grabbing"
+                className="flex h-9 w-9 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg border-0 bg-transparent text-muted transition-colors select-none hover:text-accent active:cursor-grabbing"
               >
-                <IconGrip className="h-4 w-4" />
+                <GripVertical className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -182,18 +182,18 @@ export function RequestRow({
               </Select>
               {/* Negatives (reject/cancel) on the left, positives (accept/complete) on the right. */}
               {request.status === 'requested' ? (
-                <IconButton tone="hintCaution" icon={IconX} label={t('staff.row.reject')} disabled={pending} onClick={onCancel} />
+                <IconButton tone="hintCaution" icon={X} label={t('staff.row.reject')} disabled={pending} onClick={onCancel} />
               ) : (
-                <IconButton tone="danger" icon={IconX} label={t('staff.row.cancel')} disabled={pending} onClick={onCancel} />
+                <IconButton tone="danger" icon={X} label={t('staff.row.cancel')} disabled={pending} onClick={onCancel} />
               )}
               {request.status === 'in_progress' && (
-                <IconButton tone="neutral" icon={IconUndo} label={t('staff.row.revert')} disabled={pending} onClick={() => run(() => revertRequest(request.id, 'in_progress'))} />
+                <IconButton tone="neutral" icon={ArrowLeft} label={t('staff.row.revert')} disabled={pending} onClick={() => run(() => revertRequest(request.id, 'in_progress'))} />
               )}
               {request.status === 'requested' && (
-                <IconButton tone="hintPositive" icon={IconClaim} label={t('staff.row.claim')} disabled={pending} onClick={() => run(() => claimRequest(request.id, staffId))} />
+                <IconButton tone="hintPositive" icon={ArrowDownToLine} label={t('staff.row.claim')} disabled={pending} onClick={() => run(() => claimRequest(request.id, staffId))} />
               )}
               {request.status === 'in_progress' && (
-                <IconButton tone="ok" icon={IconCheck} label={t('staff.row.complete')} disabled={pending} onClick={() => run(() => completeRequest(request.id))} />
+                <IconButton tone="ok" icon={Check} label={t('staff.row.complete')} disabled={pending} onClick={() => run(() => completeRequest(request.id))} />
               )}
             </div>
           )}
@@ -201,16 +201,16 @@ export function RequestRow({
           {mode === 'done' && (
             <div className="flex flex-wrap items-center gap-2">
               {trackable && request.status === 'completed' && !request.returned_at && (
-                <IconButton tone="ok" icon={IconReturn} label={t('staff.row.markReturned')} disabled={pending} onClick={() => run(() => markItemReturned(request.id))} />
+                <IconButton tone="ok" icon={PackageCheck} label={t('staff.row.markReturned')} disabled={pending} onClick={() => run(() => markItemReturned(request.id))} />
               )}
               <IconButton
                 tone="neutral"
-                icon={IconUndo}
+                icon={ArrowLeft}
                 label={t('staff.row.revert')}
                 disabled={pending}
                 onClick={() => run(() => revertRequest(request.id, request.status === 'completed' ? 'completed' : 'cancelled'))}
               />
-              <IconButton tone="danger" icon={IconTrash} label={t('staff.row.delete')} disabled={pending} onClick={onDelete} />
+              <IconButton tone="danger" icon={Trash2} label={t('staff.row.delete')} disabled={pending} onClick={onDelete} />
             </div>
           )}
         </div>
