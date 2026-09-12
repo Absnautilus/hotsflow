@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { PublicHeader } from '@/components/public-header'
 import { cn } from '@/lib/cn'
 import { clearGuestToken, getGuestToken, setGuestToken } from '@/lib/guest-token'
-import { getStayInfo, isInvalidSessionError, listMyRequests, type StayInfo } from '@/lib/guest-api'
+import { getStayInfo, isInvalidSessionError, listMyRequests, resolveHotelFromSlug, type StayInfo } from '@/lib/guest-api'
 import { useLocale } from '@/lib/i18n/locale-context'
 import { LoginScreen } from '@/guest/login-screen'
 import { RequestFlow } from '@/guest/request-flow'
@@ -21,6 +21,21 @@ export function GuestApp() {
   const [stay, setStay] = useState<StayInfo | null>(null)
   const [tab, setTab] = useState<Tab>('new')
   const [refreshKey, setRefreshKey] = useState(0)
+  // Runs once per page load regardless of an existing token: the hotel id
+  // resolved from the URL slug is cached in memory only (lib/env.ts), which
+  // a fresh load always starts empty, even for a returning guest whose
+  // token/hotel id both already live in localStorage.
+  const [hotelResolved, setHotelResolved] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    resolveHotelFromSlug().then((ok) => {
+      if (!cancelled) setHotelResolved(ok)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function onSessionExpired() {
     clearGuestToken()
@@ -66,10 +81,18 @@ export function GuestApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  if (!checked) {
+  if (!checked || hotelResolved === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-7 w-7 animate-spin rounded-full border-3 border-line-strong border-t-accent" />
+      </div>
+    )
+  }
+
+  if (!hotelResolved) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <p className="max-w-sm text-center text-sm text-muted">{t('login.invalidLink')}</p>
       </div>
     )
   }

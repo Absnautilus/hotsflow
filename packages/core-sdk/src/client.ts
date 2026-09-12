@@ -6,7 +6,7 @@ import { deleteDevicePushSubscription, isDevicePushSubscribed, saveDevicePushSub
 import { getAccessibleProperties, getMembership, updateProperty } from './memberships'
 import { hasPermission } from './permissions'
 import { getEnabledModules } from './modules'
-import { getGuestRequestsLegacyHotelId } from './guestRequests'
+import { getGuestRequestsLegacyHotelId, getGuestRequestsSlugForProperty } from './guestRequests'
 import { archiveTeamMember, createJobTitle, createTeamMemberWithCredentials, getHousekeepingAccessStatus, getJobTitles, getPropertyRoles, getTeamMembers, grantHousekeepingAccess, inviteTeamMember, resetTeamMemberPassword, revokeHousekeepingAccess, updateJobTitle, updateTeamMember } from './team'
 
 export interface CoreClient {
@@ -20,6 +20,7 @@ export interface CoreClient {
   hasPermission: (propertyId: string, permissionSlug: string) => Promise<boolean>
   getEnabledModules: (propertyId: string) => Promise<ModuleEntitlement[]>
   getGuestRequestsLegacyHotelId: (propertyId: string) => Promise<string | null>
+  getGuestRequestsSlugForProperty: (propertyId: string) => Promise<string | null>
   getTeamMembers: (propertyId: string) => Promise<TeamMember[]>
   getPropertyRoles: () => Promise<CoreRole[]>
   getJobTitles: (propertyId: string) => Promise<JobTitle[]>
@@ -50,6 +51,7 @@ export function createCoreClient(supabaseUrl: string, supabaseAnonKey: string): 
     hasPermission: (propertyId, permissionSlug) => hasPermission(raw, propertyId, permissionSlug),
     getEnabledModules: (propertyId) => getEnabledModules(raw, propertyId),
     getGuestRequestsLegacyHotelId: (propertyId) => getGuestRequestsLegacyHotelId(raw, propertyId),
+    getGuestRequestsSlugForProperty: (propertyId) => getGuestRequestsSlugForProperty(raw, propertyId),
     getTeamMembers: (propertyId) => getTeamMembers(raw, propertyId),
     getPropertyRoles: () => getPropertyRoles(raw),
     getJobTitles: (propertyId) => getJobTitles(raw, propertyId),

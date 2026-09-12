@@ -18,3 +18,18 @@ export async function getGuestRequestsLegacyHotelId(
   if (error) throw error
   return data ?? null
 }
+
+export async function getGuestRequestsSlugForProperty(
+  client: SupabaseClient<Database>,
+  propertyId: string,
+): Promise<string | null> {
+  // Same reasoning as getGuestRequestsLegacyHotelId above re: narrow typing
+  // and calling rpc through the client object directly.
+  const { data, error } = await client.rpc(
+    'guest_requests_slug_for_property' as never,
+    { p_property_id: propertyId } as never,
+  ) as { data: string | null; error: Error | null }
+
+  if (error) throw error
+  return data ?? null
+}

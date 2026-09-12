@@ -1,9 +1,36 @@
 import { supabase } from '@/lib/supabase'
-import { getHotelId } from '@/lib/env'
+import { getHotelId, getHotelSlugFromPath, getStoredHotelId, setResolvedHotelId } from '@/lib/env'
 import type { GuestRequest, RequestCategory, RequestType } from '@/lib/types'
 
 export function isInvalidSessionError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('invalid_session')
+}
+
+// Resolves this visit's hotel from the URL's slug (see
+// getHotelSlugFromPath), falling back to a previously resolved id
+// (localStorage) for a bare-origin revisit. Returns false when neither
+// source yields a real hotel -- the caller should show an invalid-link
+// screen rather than a login form that can never succeed.
+export async function resolveHotelFromSlug(): Promise<boolean> {
+  const slug = getHotelSlugFromPath()
+  if (slug) {
+    try {
+      const { data, error } = await supabase.rpc('resolve_hotel_guest_slug', { p_slug: slug })
+      if (!error && data) {
+        setResolvedHotelId(data)
+        return true
+      }
+    } catch {
+      // network failure resolving the slug -- fall through to a previously
+      // resolved id below rather than leaving the caller hanging
+    }
+  }
+  const stored = getStoredHotelId()
+  if (stored) {
+    setResolvedHotelId(stored)
+    return true
+  }
+  return false
 }
 
 export async function guestLogin(roomNumber: string, pin: string): Promise<string | null> {
