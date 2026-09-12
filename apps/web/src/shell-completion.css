@@ -92,7 +92,6 @@ button.job-role-chip:hover { border-color: var(--accent); }
 
 .shell-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
 .shell-alert.error { border-color: rgba(178,58,58,.22); color: var(--red-ink); background: var(--red-bg); }
-.shell-alert.success { border-color: rgba(30,122,70,.22); color: var(--green-ink); background: var(--green-bg); }
 .shell-alert button { border: 0; background: transparent; color: inherit; font-weight: 800; cursor: pointer; }
 
 body.modal-open { overflow: hidden; }
