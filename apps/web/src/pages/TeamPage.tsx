@@ -35,23 +35,34 @@ export function TeamPage() {
   const [confirmDialog, confirm] = useConfirm()
   const housekeepingEntitled = runtime.entitlements.some((item) => item.enabled && item.slug === 'guest_requests')
 
+  // Optimistic, matching the Moduli popup (#41) and Housekeeping's own
+  // toggles (#45): flip the row immediately instead of waiting for
+  // updateTeamMember's round trip. The earlier fix here (patch the one row
+  // instead of a full loadTeam() reload) removed the *extra* network calls
+  // but still held the switch `disabled` for this member's own request,
+  // which was long enough to show the browser's not-allowed cursor --
+  // exactly the same class of lag this pattern already fixes elsewhere.
+  // togglingId still guards against a second click landing mid-request; it
+  // just no longer disables the control to do it.
   async function onToggleAccess(member: TeamMember) {
-    if (!property) return
+    if (!property || togglingId === member.membership.id) return
     const next = member.membership.status === 'active' ? 'suspended' : 'active'
     setTogglingId(member.membership.id)
+    setTeam((current) => ({
+      ...current,
+      members: current.members.map((m) =>
+        m.membership.id === member.membership.id ? { ...m, membership: { ...m.membership, status: next } } : m,
+      ),
+    }))
     try {
       await core.updateTeamMember({ membershipId: member.membership.id, profileId: member.profile.id, propertyId: property.id, membershipStatus: next })
-      // Patch the one changed row in place instead of a full loadTeam()
-      // reload (4 network calls) for a single field flip -- that reload
-      // held the switch disabled for its entire round-trip, which read as
-      // the whole page lagging on every click.
+    } catch (cause) {
       setTeam((current) => ({
         ...current,
         members: current.members.map((m) =>
-          m.membership.id === member.membership.id ? { ...m, membership: { ...m.membership, status: next } } : m,
+          m.membership.id === member.membership.id ? { ...m, membership: { ...m.membership, status: member.membership.status } } : m,
         ),
       }))
-    } catch (cause) {
       setError(readableError(cause))
     } finally {
       setTogglingId(null)
@@ -143,7 +154,7 @@ export function TeamPage() {
                 <Switch
                   checked={member.membership.status === 'active'}
                   onChange={() => onToggleAccess(member)}
-                  disabled={!team.canManage || isSelf || orgWide || togglingId === member.membership.id}
+                  disabled={!team.canManage || isSelf || orgWide}
                   aria-label={`Stato accesso di ${member.profile.fullName}`}
                 />
                 {member.employmentStatus === 'inactive' ? <small className="muted">Fuori organico</small> : null}
