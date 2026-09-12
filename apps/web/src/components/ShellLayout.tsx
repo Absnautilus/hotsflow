@@ -84,7 +84,7 @@ export function ShellLayout() {
     </>
   )
 
-  const brandMark = <div className="brand"><span className="mark">H</span><span>Homisuite</span></div>
+  const brandMark = <div className="brand"><img className="mark" src="/icon-192.png" alt="" width={28} height={28} /><span>Homisuite</span></div>
 
   const propertySwitcher = (
     <PropertySwitcher

@@ -61,7 +61,7 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
           <button
             type="button"
             onClick={() => settle(false)}
-            className="flex-1 cursor-pointer rounded-sm border border-line-strong bg-surface px-4 py-2.5 text-sm font-bold text-foreground/70 hover:bg-surface-2"
+            className="h-8 flex-1 cursor-pointer rounded-sm border border-line-strong bg-surface px-3 text-xs font-bold text-foreground/70 hover:bg-surface-2"
           >
             {t('staff.confirm.cancel')}
           </button>
@@ -69,7 +69,7 @@ export function useConfirm(): [ReactNode, (options: ConfirmOptions) => Promise<b
             type="button"
             onClick={() => settle(true)}
             className={
-              'flex-1 cursor-pointer rounded-sm px-4 py-2.5 text-sm font-bold ' +
+              'h-8 flex-1 cursor-pointer rounded-sm px-3 text-xs font-bold ' +
               (pending.tone === 'neutral' ? 'bg-accent text-accent-ink hover:brightness-[1.06]' : 'border border-bad-ink/25 bg-bad-bg text-bad-ink hover:bg-bad-ink/15')
             }
           >
