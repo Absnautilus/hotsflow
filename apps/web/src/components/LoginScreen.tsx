@@ -77,7 +77,7 @@ export function LoginScreen() {
   return (
     <main className="login-screen">
       <section className="login-card" aria-labelledby="login-title">
-        <div className="login-brand"><span className="mark">H</span><span>Homisuite</span></div>
+        <div className="login-brand"><img className="mark" src="/icon-192.png" alt="" width={28} height={28} /><span>Homisuite</span></div>
         <div className="login-copy">
           <p className="eyebrow">Workspace hotel</p>
           <h1 id="login-title">Bentornato</h1>

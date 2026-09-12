@@ -108,6 +108,7 @@ body.modal-open { overflow: hidden; }
 .modal-body { padding: 20px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); background: var(--surface-2); }
 .modal-footer .push-left { margin-right: auto; }
+.modal-footer .btn { min-height: 32px; padding: 0 12px; font-size: 12px; }
 .btn-danger { color: var(--red-ink); background: var(--red-bg); border: 1px solid rgba(178,58,58,.16); }
 .modal-form { display: grid; gap: 15px; }
 .module-access-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
