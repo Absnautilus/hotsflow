@@ -25,7 +25,7 @@ walks up to find the workspace root and installs the whole tree), but
 `npm run build` is **not** — run directly inside `apps/web` with no
 override, it only executes `apps/web`'s own `build` script
 (`tsc -b && vite build`) and fails with
-`Cannot find module '@hotsflow/housekeeping-module'`, because
+`Cannot find module '@homisuite/housekeeping-module'`, because
 `modules/housekeeping`'s own library build (`dist/`) never runs first. This
 is the same class of bug fixed for GitHub Actions CI in Fase 6 (PR #29),
 surfacing again here because Vercel's zero-config default for a Vite project
@@ -53,7 +53,7 @@ Environment variables (Preview and Production), per
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `VITE_SUPABASE_URL` | Yes | Same shared Hotsflow Supabase project already used by `apps/web` and `Housekeeping`'s production data (per `fase2-guest-requests-migration.md`) — never a separate/legacy project. |
+| `VITE_SUPABASE_URL` | Yes | Same shared Homisuite Supabase project already used by `apps/web` and `Housekeeping`'s production data (per `fase2-guest-requests-migration.md`) — never a separate/legacy project. |
 | `VITE_SUPABASE_ANON_KEY` | Yes | Same project as above. |
 | `VITE_VAPID_PUBLIC_KEY` | No | Push notifications for the Housekeeping on-duty toggle; the toggle hides itself when unset. |
 | `VITE_HOTEL_ID` | **No — do not set** | Only read by a standalone-guest-mode code path that was deliberately not transferred in Fase 5 (`docs/architecture/housekeeping-inventory.md`); verified unreferenced anywhere in `modules/housekeeping/src`'s reachable embedded code. Setting it would have no effect. |

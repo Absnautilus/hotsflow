@@ -7,7 +7,7 @@ const LABELS: Record<Lang, string> = { it: 'Italiano', en: 'English' }
 const LANGS: Lang[] = ['it', 'en']
 
 function readStoredLanguage(): Lang {
-  return localStorage.getItem('hotsflow.language') === 'en' ? 'en' : 'it'
+  return localStorage.getItem('homisuite.language') === 'en' ? 'en' : 'it'
 }
 
 // Inline flag toggle rather than a flag-trigger + flyout: every place this
@@ -23,14 +23,14 @@ export function LanguageToggle() {
       const next = (event as CustomEvent<string>).detail
       if (next === 'it' || next === 'en') setLanguageState(next)
     }
-    window.addEventListener('hotsflow:language-change', syncLanguage)
-    return () => window.removeEventListener('hotsflow:language-change', syncLanguage)
+    window.addEventListener('homisuite:language-change', syncLanguage)
+    return () => window.removeEventListener('homisuite:language-change', syncLanguage)
   }, [])
 
   function select(next: Lang) {
-    localStorage.setItem('hotsflow.language', next)
+    localStorage.setItem('homisuite.language', next)
     setLanguageState(next)
-    window.dispatchEvent(new CustomEvent('hotsflow:language-change', { detail: next }))
+    window.dispatchEvent(new CustomEvent('homisuite:language-change', { detail: next }))
   }
 
   return (

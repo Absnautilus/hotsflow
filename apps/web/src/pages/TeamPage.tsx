@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import type { CoreRole, JobTitle, TeamMember } from '@hotsflow/core-sdk'
+import type { CoreRole, JobTitle, TeamMember } from '@homisuite/core-sdk'
 import { Boxes, BriefcaseBusiness, KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserPlus, Users } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import { PasswordField } from '../components/PasswordField'
@@ -115,13 +115,13 @@ export function TeamPage() {
   return (
     <div className="page-stack shell-page team-page">
       <header className="page-heading split">
-        <div><p className="eyebrow">{propertyName}</p><h1>Team</h1><p>Persone, accessi Hotsflow e mansioni operative della struttura.</p></div>
+        <div><p className="eyebrow">{propertyName}</p><h1>Team</h1><p>Persone, accessi Homisuite e mansioni operative della struttura.</p></div>
         {team.canManage ? <button className="primary-action" type="button" onClick={() => setCreateOpen(true)}><UserPlus size={17} /> Crea profilo</button> : null}
       </header>
 
       <section className="shell-card team-principle-card">
         <div className="icon-tile"><ShieldCheck size={20} /></div>
-        <div><strong>Accesso e mansione sono separati</strong><p>Il ruolo Hotsflow decide cosa si può fare nel software. La mansione descrive il lavoro reale in hotel e può essere personalizzata dalla struttura.</p></div>
+        <div><strong>Accesso e mansione sono separati</strong><p>Il ruolo Homisuite decide cosa si può fare nel software. La mansione descrive il lavoro reale in hotel e può essere personalizzata dalla struttura.</p></div>
       </section>
 
       {error ? <div className="shell-alert error" role="alert">{error}<button type="button" onClick={() => void loadTeam()}>Riprova</button></div> : null}
@@ -134,7 +134,7 @@ export function TeamPage() {
         <div className="team-table" role="table" aria-label="Team">
           <div className="team-row team-row-head" role="row">
             <span role="columnheader">Persona</span>
-            <span role="columnheader">Accesso Hotsflow</span>
+            <span role="columnheader">Accesso Homisuite</span>
             <span role="columnheader">Mansione</span>
             <span role="columnheader">Stato</span>
             <span role="columnheader" aria-hidden="true" />
@@ -266,7 +266,7 @@ function CreateProfileModal({ open, propertyId, roles, jobTitles, onClose, onCre
     </Modal>
   }
 
-  return <Modal open={open} title="Crea profilo" description="Crea un unico account Hotsflow e collegalo alla struttura." onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="create-profile-form" disabled={saving || roles.length === 0}>{saving ? 'Creazione…' : mode === 'email' ? 'Invia invito' : 'Crea profilo'}</button></>}>
+  return <Modal open={open} title="Crea profilo" description="Crea un unico account Homisuite e collegalo alla struttura." onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="create-profile-form" disabled={saving || roles.length === 0}>{saving ? 'Creazione…' : mode === 'email' ? 'Invia invito' : 'Crea profilo'}</button></>}>
     <div className="mode-toggle" role="tablist" aria-label="Modalità di creazione">
       <button type="button" role="tab" aria-selected={mode === 'email'} className={mode === 'email' ? 'active' : ''} onClick={() => { setMode('email'); setError(null) }}>Invito email</button>
       <button type="button" role="tab" aria-selected={mode === 'credentials'} className={mode === 'credentials' ? 'active' : ''} onClick={() => { setMode('credentials'); setError(null) }}>Credenziali</button>
@@ -282,7 +282,7 @@ function CreateProfileModal({ open, propertyId, roles, jobTitles, onClose, onCre
           <Field label="Conferma password"><PasswordField name="passwordConfirm" required minLength={8} maxLength={72} autoComplete="new-password" /></Field>
         </>
       )}
-      <Field label="Accesso Hotsflow" htmlFor="create-role"><Select id="create-role" name="role" value={roleId} onChange={setRoleId}><option value="" disabled>Seleziona ruolo</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role.slug, role.displayName)}</option>)}</Select></Field>
+      <Field label="Accesso Homisuite" htmlFor="create-role"><Select id="create-role" name="role" value={roleId} onChange={setRoleId}><option value="" disabled>Seleziona ruolo</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role.slug, role.displayName)}</option>)}</Select></Field>
       <Field label="Mansione" htmlFor="create-job"><Select id="create-job" name="job" value={jobId} onChange={setJobId}><option value="">Da assegnare</option>{jobTitles.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</Select></Field>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </form>
@@ -401,7 +401,7 @@ function EditMemberModal({ member, roles, jobTitles, currentProfileId, propertyI
   }
   return <Modal open={Boolean(member)} title={member ? `Modifica ${member.profile.fullName}` : 'Modifica persona'} description={orgWide ? 'L’accesso organizzazione si modifica a livello organizzazione; qui puoi assegnare la mansione locale.' : undefined} onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="edit-member-form" disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
     {member ? <form className="modal-form" id="edit-member-form" onSubmit={submit}>
-      <Field label="Accesso Hotsflow" htmlFor="edit-role"><Select id="edit-role" name="role" value={roleId} onChange={setRoleId} disabled={orgWide || isSelf}><option value={member.role.id}>{roleLabel(member.role.slug, member.role.displayName)}</option>{roles.filter((role) => role.id !== member.role.id).map((role) => <option key={role.id} value={role.id}>{roleLabel(role.slug, role.displayName)}</option>)}</Select></Field>
+      <Field label="Accesso Homisuite" htmlFor="edit-role"><Select id="edit-role" name="role" value={roleId} onChange={setRoleId} disabled={orgWide || isSelf}><option value={member.role.id}>{roleLabel(member.role.slug, member.role.displayName)}</option>{roles.filter((role) => role.id !== member.role.id).map((role) => <option key={role.id} value={role.id}>{roleLabel(role.slug, role.displayName)}</option>)}</Select></Field>
       <Field label="Mansione" htmlFor="edit-job"><Select id="edit-job" name="job" value={jobId} onChange={setJobId}><option value="">Da assegnare</option>{jobTitles.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</Select></Field>
       <Field label="Stato lavorativo" htmlFor="edit-employment-status"><Select id="edit-employment-status" name="employmentStatus" value={employmentStatus} onChange={setEmploymentStatus}><option value="active">In organico</option><option value="inactive">Non più in organico</option></Select></Field>
       {error ? <p className="form-error" role="alert">{error}</p> : null}
@@ -430,7 +430,7 @@ function JobModal({ job, propertyId, onClose, onSaved }: { job: JobTitle | 'new'
     try { await core.updateJobTitle(existing.id, { active: false }); await onSaved() }
     catch (cause) { setError(readableError(cause)); setSaving(false) }
   }
-  return <Modal open={Boolean(job)} title={existing ? 'Modifica mansione' : 'Nuova mansione'} description="La mansione descrive il lavoro, non modifica i permessi Hotsflow." onClose={onClose} footer={<>{existing ? <button className="btn btn-danger push-left" type="button" onClick={() => void deactivate()} disabled={saving}>Disattiva</button> : null}<button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="job-form" disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
+  return <Modal open={Boolean(job)} title={existing ? 'Modifica mansione' : 'Nuova mansione'} description="La mansione descrive il lavoro, non modifica i permessi Homisuite." onClose={onClose} footer={<>{existing ? <button className="btn btn-danger push-left" type="button" onClick={() => void deactivate()} disabled={saving}>Disattiva</button> : null}<button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="job-form" disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
     <form className="modal-form" id="job-form" onSubmit={submit}><Field label="Nome mansione"><input name="name" required minLength={1} maxLength={80} defaultValue={existing?.name ?? ''} /></Field>{error ? <p className="form-error" role="alert">{error}</p> : null}</form>
   </Modal>
 }

@@ -207,7 +207,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Disattiva',
     'staff.operators.reactivate': 'Riattiva',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'Gli account e gli accessi si gestiscono in Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'Gli account e gli accessi si gestiscono in Homisuite Team.',
 
     'staff.rooms.title': 'Camere',
     'staff.rooms.subtitle': 'Le camere qui sotto sono selezionabili quando si attiva un soggiorno.',
@@ -571,7 +571,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Deactivate',
     'staff.operators.reactivate': 'Reactivate',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'Accounts and access are managed in Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'Accounts and access are managed in Homisuite Team.',
 
     'staff.rooms.title': 'Rooms',
     'staff.rooms.subtitle': 'The rooms below are selectable when activating a stay.',
@@ -935,7 +935,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Désactiver',
     'staff.operators.reactivate': 'Réactiver',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'Les comptes et les accès se gèrent dans Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'Les comptes et les accès se gèrent dans Homisuite Team.',
 
     'staff.rooms.title': 'Chambres',
     'staff.rooms.subtitle': 'Les chambres ci-dessous sont sélectionnables lors de l’activation d’un séjour.',
@@ -1299,7 +1299,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Deaktivieren',
     'staff.operators.reactivate': 'Reaktivieren',
     'staff.operators.accessEmail': 'E-Mail',
-    'staff.operators.accountsManagedElsewhere': 'Konten und Zugriffe werden in Hotsflow Team verwaltet.',
+    'staff.operators.accountsManagedElsewhere': 'Konten und Zugriffe werden in Homisuite Team verwaltet.',
 
     'staff.rooms.title': 'Zimmer',
     'staff.rooms.subtitle': 'Die untenstehenden Zimmer sind bei der Aktivierung eines Aufenthalts auswählbar.',
@@ -1663,7 +1663,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Desactivar',
     'staff.operators.reactivate': 'Reactivar',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'Las cuentas y los accesos se gestionan en Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'Las cuentas y los accesos se gestionan en Homisuite Team.',
 
     'staff.rooms.title': 'Habitaciones',
     'staff.rooms.subtitle': 'Las habitaciones de abajo se pueden seleccionar al activar una estancia.',
@@ -2027,7 +2027,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Desativar',
     'staff.operators.reactivate': 'Reativar',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'As contas e os acessos são geridos no Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'As contas e os acessos são geridos no Homisuite Team.',
 
     'staff.rooms.title': 'Quartos',
     'staff.rooms.subtitle': 'Os quartos abaixo podem ser selecionados ao ativar uma estadia.',
@@ -2391,7 +2391,7 @@ export const dictionaries = {
     'staff.operators.deactivate': '無効化',
     'staff.operators.reactivate': '再有効化',
     'staff.operators.accessEmail': 'メール',
-    'staff.operators.accountsManagedElsewhere': 'アカウントとアクセス権はHotsflow Teamで管理します。',
+    'staff.operators.accountsManagedElsewhere': 'アカウントとアクセス権はHomisuite Teamで管理します。',
 
     'staff.rooms.title': '部屋',
     'staff.rooms.subtitle': '以下の部屋は宿泊を開始する際に選択できます。',
@@ -2755,7 +2755,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'নিষ্ক্রিয় করুন',
     'staff.operators.reactivate': 'পুনরায় সক্রিয় করুন',
     'staff.operators.accessEmail': 'ইমেইল',
-    'staff.operators.accountsManagedElsewhere': 'অ্যাকাউন্ট ও অ্যাক্সেস Hotsflow Team-এ পরিচালিত হয়।',
+    'staff.operators.accountsManagedElsewhere': 'অ্যাকাউন্ট ও অ্যাক্সেস Homisuite Team-এ পরিচালিত হয়।',
 
     'staff.rooms.title': 'রুম',
     'staff.rooms.subtitle': 'নিচের রুমগুলো একটি থাকা সক্রিয় করার সময় নির্বাচনযোগ্য।',
@@ -3119,7 +3119,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'निष्क्रिय करें',
     'staff.operators.reactivate': 'पुनः सक्रिय करें',
     'staff.operators.accessEmail': 'ईमेल',
-    'staff.operators.accountsManagedElsewhere': 'खाते और एक्सेस Hotsflow Team में प्रबंधित किए जाते हैं।',
+    'staff.operators.accountsManagedElsewhere': 'खाते और एक्सेस Homisuite Team में प्रबंधित किए जाते हैं।',
 
     'staff.rooms.title': 'कमरे',
     'staff.rooms.subtitle': 'नीचे दिए गए कमरे किसी प्रवास को सक्रिय करते समय चुने जा सकते हैं।',
@@ -3483,7 +3483,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'تعطيل',
     'staff.operators.reactivate': 'إعادة تفعيل',
     'staff.operators.accessEmail': 'البريد الإلكتروني',
-    'staff.operators.accountsManagedElsewhere': 'تُدار الحسابات والصلاحيات في Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'تُدار الحسابات والصلاحيات في Homisuite Team.',
 
     'staff.rooms.title': 'الغرف',
     'staff.rooms.subtitle': 'يمكن اختيار الغرف أدناه عند تفعيل إقامة.',
@@ -3847,7 +3847,7 @@ export const dictionaries = {
     'staff.operators.deactivate': '停用',
     'staff.operators.reactivate': '重新启用',
     'staff.operators.accessEmail': '邮箱',
-    'staff.operators.accountsManagedElsewhere': '账户和权限在 Hotsflow Team 中管理。',
+    'staff.operators.accountsManagedElsewhere': '账户和权限在 Homisuite Team 中管理。',
 
     'staff.rooms.title': '房间',
     'staff.rooms.subtitle': '激活住宿时可从以下房间中选择。',
@@ -4211,7 +4211,7 @@ export const dictionaries = {
     'staff.operators.deactivate': 'Отключить',
     'staff.operators.reactivate': 'Активировать снова',
     'staff.operators.accessEmail': 'email',
-    'staff.operators.accountsManagedElsewhere': 'Учётные записи и доступ управляются в Hotsflow Team.',
+    'staff.operators.accountsManagedElsewhere': 'Учётные записи и доступ управляются в Homisuite Team.',
 
     'staff.rooms.title': 'Комнаты',
     'staff.rooms.subtitle': 'Комнаты ниже можно выбрать при активации проживания.',

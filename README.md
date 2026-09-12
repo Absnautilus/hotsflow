@@ -12,7 +12,7 @@ tre moduli esistenti, decisioni architetturali).
 
 Il backend condiviso è **provisionato, validato end-to-end e in uso in produzione**
 per Housekeeping / `guest_requests` di Palazzo Veneziano. Il cutover dal progetto
-Supabase legacy al progetto Hotsflow condiviso è stato completato e validato; il
+Supabase legacy al progetto Homisuite condiviso è stato completato e validato; il
 backend legacy resta congelato come safety net e non è più il backend operativo.
 
 La migrazione ha portato nel Core condiviso identità Auth, profili, membership,

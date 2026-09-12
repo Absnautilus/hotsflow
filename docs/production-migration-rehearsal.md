@@ -12,7 +12,7 @@ production data migration has started; no cutover has occurred.
 I have no direct credentials to the legacy Housekeeping Supabase project —
 confirmed by checking Housekeeping's own GitHub Actions workflows
 (`e2e-smoke.yml`, `deploy-functions.yml`): both target `SUPABASE_PROJECT_REF`,
-which is the *shared Hotsflow* project ref (set up earlier in Fase 2), not
+which is the *shared Homisuite* project ref (set up earlier in Fase 2), not
 the legacy one. There is no `deploy-migrations.yml` in Housekeeping and no
 legacy DB secret anywhere in either repo's CI configuration. Every read of
 the legacy project in this entire engagement has gone through you — running
@@ -222,7 +222,7 @@ was already anonymized inline (no real name/email/PIN ever left legacy).
 
 **Target used:** disposable local Supabase stack inside a GitHub Actions
 runner (`ubuntu-latest`), destroyed when the job ended. Never the real
-legacy or Hotsflow projects.
+legacy or Homisuite projects.
 
 **Schema/version/commit:** hotsflow-core `main` @ `2347f68` (migrations
 through `20260827122700`). Scripts: `scripts/dry-run/00_seed_legacy_synthetic.sql`
@@ -351,7 +351,7 @@ propagation — plan §H), not by the migration script itself.
 
 **Differences between this rehearsal and the future production execution:**
 1. This rehearsal's target was a disposable local stack, not the real
-   Hotsflow project — production execution talks to the real hosted
+   Homisuite project — production execution talks to the real hosted
    database over the network, with real latency and real connection
    limits neither exercised here.
 2. The Auth-creation step here used GoTrue running inside the local

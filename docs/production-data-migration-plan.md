@@ -6,7 +6,7 @@ read-only unless explicitly marked otherwise, and every marked-otherwise step
 requires separate, explicit approval before it runs.
 
 This plan exists because the pre-cutover infrastructure gate found that
-`hotels` on the shared Hotsflow project contains only the 3 demo/E2E fixture
+`hotels` on the shared Homisuite project contains only the 3 demo/E2E fixture
 hotels — the real production hotel (legacy id `25b00bec-1602-46e9-bf52-a4913ebb5bdb`,
 the value currently in Vercel's `VITE_HOTEL_ID`) has never been migrated.
 Everything validated so far in Fase 2 (194→198 pgTAP tests, the full E2E
@@ -115,10 +115,10 @@ Concrete implications:
 
 ## B. Auth users — separate treatment
 
-`profiles.id` on the Hotsflow project is `uuid primary key references
+`profiles.id` on the Homisuite project is `uuid primary key references
 auth.users(id) on delete cascade` (Core schema, `0004_profiles_memberships.sql`).
 This means: **a `profiles`/`memberships` row for a staff member cannot exist
-at all until a matching `auth.users` row exists on the Hotsflow project with
+at all until a matching `auth.users` row exists on the Homisuite project with
 that exact id.** Copying `staff_profiles` alone, without a real `auth.users`
 counterpart on the new project, is not a partial migration — it's not a
 migration, the inserts would fail their FK. Flagging this explicitly because
@@ -129,7 +129,7 @@ supports (not assumed):
 
 | | Preservable? | How |
 |---|---|---|
-| **email** | Yes | `admin.createUser({ email })` accepts any email, including reusing the legacy one — no conflict risk, no other account uses these emails on Hotsflow yet. |
+| **email** | Yes | `admin.createUser({ email })` accepts any email, including reusing the legacy one — no conflict risk, no other account uses these emails on Homisuite yet. |
 | **password / login continuity** | **No**, not via the supported path | The Admin API has no endpoint that accepts a pre-computed password hash for import. The only way to set a password through it is to supply a brand-new plaintext one — which neither of us should know the real one to preserve. Writing directly into `auth.users.encrypted_password` via raw SQL is technically possible (it's a normal Postgres column) but is explicitly outside Supabase's supported surface for that schema — I'm not proposing it, same reasoning as never touching other systems' internals directly in this engagement. |
 | **user UUID** | **NOT SUPPORTED BY THE DOCUMENTED ADMIN API** | Supabase's current `auth.admin.createUser()` documentation does not document an `id` parameter — there is no supported, documented way to request a specific user UUID. |
 
@@ -169,11 +169,11 @@ or is unsupported, §D below (explicit UUID remapping) is the fallback path,
 designed either way.
 
 **Pre-step (not yet executed, needs its own go-ahead even though it's
-small and reversible):** create ONE disposable test user on the Hotsflow
+small and reversible):** create ONE disposable test user on the Homisuite
 project via the Admin API with an explicit `id`, record only whether the
 id was honored or replaced (no other data), then delete it.
 
-**Empirical test result (run 2026-09-02, against the Hotsflow project's
+**Empirical test result (run 2026-09-02, against the Homisuite project's
 GoTrue Admin endpoint directly):** the explicit `id` was honored — the
 created user's `id` came back exactly as requested
 (`11111111-1111-1111-1111-111111111111`). This confirms the undocumented
@@ -188,7 +188,7 @@ preferable where one exists.
 **Cleanup status: not yet confirmed.** The disposable test user
 (`auth-uuid-test-disposable@example.test`, id
 `11111111-1111-1111-1111-111111111111`) must be deleted from the live
-Hotsflow project — this experiment must not leave a residual fixture.
+Homisuite project — this experiment must not leave a residual fixture.
 This is a requirement, not an assumption: verify deletion with
 ```sql
 select count(*) from auth.users where id = '11111111-1111-1111-1111-111111111111';
@@ -198,7 +198,7 @@ rather than treating "I clicked delete" as sufficient on its own — confirm
 the row is actually gone before considering this test closed out.
 
 **Cleanup confirmed (2026-09-02):** the disposable test user was deleted
-from the live Hotsflow project via Studio. No residual fixture from this
+from the live Homisuite project via Studio. No residual fixture from this
 experiment remains.
 
 ### B.1 Before any dry-run: five explicit questions on the UUID dependency
@@ -273,7 +273,7 @@ cannot undo it. Explicit procedure:
   succeeded — not just the happy path.
 
 One incidental finding from running this test, unrelated to its result:
-the Hotsflow project uses Supabase's newer Publishable/Secret API key
+the Homisuite project uses Supabase's newer Publishable/Secret API key
 format (`sb_secret_...`), not the legacy `service_role` JWT — same
 privilege level, different naming. Also, Supabase's gateway refuses a
 secret key on any request whose `User-Agent` looks browser-like (a
@@ -380,7 +380,7 @@ create temporary table auth_uuid_remap (
 ```
 
 For each legacy `staff_profiles` row: create the corresponding user on
-Hotsflow via `admin.createUser({ email })` (new, server-generated id),
+Homisuite via `admin.createUser({ email })` (new, server-generated id),
 record the pair in `auth_uuid_remap`, then use `new_auth_user_id` — never
 the legacy one — everywhere a migrated row needs to point at Auth:
 `staff_profiles.auth_user_id`, `profiles.id`, and `memberships.profile_id`.
@@ -433,7 +433,7 @@ migration script run against the synthetic dataset
 ```
 
 This reuses infrastructure that already exists (the CI job) rather than
-inventing a new environment, and never touches the real legacy or Hotsflow
+inventing a new environment, and never touches the real legacy or Homisuite
 projects. Only once this passes cleanly does §L's real-data run happen.
 
 **Implementation:** `scripts/dry-run/` (seed, migration, reconciliation
@@ -571,11 +571,11 @@ clean slate.
 touched, so this is instant and lossless.
 
 **3. Cutover fails after real writes exist on the new backend** (a guest
-submitted a request, staff accepted one, on Hotsflow). This is the case
+submitted a request, staff accepted one, on Homisuite). This is the case
 where "revert the env vars" is **not** sufficient, exactly as you flagged —
 doing that alone silently discards real actions.
 - Freeze writes on both backends the moment the problem is found.
-- Export the delta: everything on Hotsflow created after the known cutover
+- Export the delta: everything on Homisuite created after the known cutover
   timestamp (`where created_at > '<cutover_time>'`, bounded and small since
   the freeze in §H gives an exact boundary).
 - Default to **forward-fix, not backward-revert**: once real writes exist on
@@ -616,14 +616,14 @@ cutover as a fallback, not deleting immediately).
 ## L. Step-by-step execution plan (NOT TO BE EXECUTED until approved)
 
 1. Run §A's row-count query on legacy (read-only).
-2. Run §B's disposable Auth-UUID test on Hotsflow, then delete the test user (small, reversible write — needs its own explicit go-ahead even though the rest of this list is blocked pending full plan approval).
+2. Run §B's disposable Auth-UUID test on Homisuite, then delete the test user (small, reversible write — needs its own explicit go-ahead even though the rest of this list is blocked pending full plan approval).
 3. Finalize §C/§D's exact provisioning script now that §B's answer is known.
 4. Build the dry-run per §F.
 5. Run §G's checks + existing E2E suite against the dry-run target.
 6. Fix anything §5 surfaces; repeat 4–5 until clean.
 7. Schedule the maintenance window (§H) and tell staff about the password-reset step (§B) in advance.
 8. Freeze writes on legacy.
-9. Run the real migration script inside one transaction against Hotsflow.
+9. Run the real migration script inside one transaction against Homisuite.
 10. Run §G's checks against the real result.
 11. Flip Vercel env vars (only the ones this plan actually requires changing — `VITE_HOTEL_ID` stays the same if §C's preservation holds).
 12. Smoke test production for real.

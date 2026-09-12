@@ -1,4 +1,4 @@
-import type { TeamMember, UpdateTeamMemberInput } from '@hotsflow/core-sdk'
+import type { TeamMember, UpdateTeamMemberInput } from '@homisuite/core-sdk'
 
 interface FormValues {
   get(name: string): FormDataEntryValue | null

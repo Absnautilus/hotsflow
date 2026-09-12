@@ -3,7 +3,7 @@
 //   apps/*     -> modules/*, packages/*         (allowed)
 //   modules/*  -> packages/core-sdk, packages/ui (allowed; no other module,
 //                                                  no apps/*)
-//   packages/core-sdk, packages/ui -> no other @hotsflow/* runtime dep
+//   packages/core-sdk, packages/ui -> no other @homisuite/* runtime dep
 //   no relative import ever crosses a workspace's own root directory
 //   no deep import into another workspace's internals -- only its declared
 //   package.json "exports" (or a bare package specifier)
@@ -20,13 +20,13 @@ const violations = []
 
 function allowedTargets(ws) {
   if (ws.group === 'apps') return null // apps may depend on any module/package
-  if (ws.group === 'modules') return new Set(['@hotsflow/core-sdk', '@hotsflow/ui'])
+  if (ws.group === 'modules') return new Set(['@homisuite/core-sdk', '@homisuite/ui'])
   if (ws.group === 'packages' && (ws.name === 'core-sdk' || ws.name === 'ui')) return new Set()
   return null // other packages (e.g. future shared packages) unrestricted for now
 }
 
 function isRuntimeHotsflowDep(name) {
-  return name.startsWith('@hotsflow/') && name !== '@hotsflow/config'
+  return name.startsWith('@homisuite/') && name !== '@homisuite/config'
 }
 
 // 1. Dependency-direction check, from each workspace's own package.json.
@@ -37,10 +37,10 @@ for (const ws of workspaces) {
   const deps = { ...(ws.pkg.dependencies ?? {}) }
   for (const dep of Object.keys(deps)) {
     if (!isRuntimeHotsflowDep(dep)) continue
-    if (ws.group === 'modules' && dep.startsWith('@hotsflow/') && !allowed.has(dep)) {
-      violations.push(`${ws.pkg.name}: depends on ${dep}, but a module may only depend on @hotsflow/core-sdk or @hotsflow/ui`)
+    if (ws.group === 'modules' && dep.startsWith('@homisuite/') && !allowed.has(dep)) {
+      violations.push(`${ws.pkg.name}: depends on ${dep}, but a module may only depend on @homisuite/core-sdk or @homisuite/ui`)
     } else if (ws.group === 'packages' && allowed.size === 0) {
-      violations.push(`${ws.pkg.name}: depends on ${dep}, but packages/${ws.name} must have no @hotsflow/* runtime dependency`)
+      violations.push(`${ws.pkg.name}: depends on ${dep}, but packages/${ws.name} must have no @homisuite/* runtime dependency`)
     }
   }
 }

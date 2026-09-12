@@ -35,7 +35,7 @@ export function AccountMenu({ name }: { name: string }) {
         <div className="account-popover" role="menu">
           <div className="account-popover-head">
             <span className="account-avatar large">{initials}</span>
-            <div><strong>{name}</strong><small>Account Hotsflow</small></div>
+            <div><strong>{name}</strong><small>Account Homisuite</small></div>
           </div>
           <Link className="account-menu-row" to="/settings#account" onClick={() => setOpen(false)}><UserRound size={16} /><span>Profilo</span></Link>
           <div className="account-language-row">

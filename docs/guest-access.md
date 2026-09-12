@@ -35,7 +35,7 @@ above.
 Import the named constants instead of the raw numbers:
 
 ```ts
-import { GUEST_VERIFICATION_LEVEL } from '@hotsflow/core-sdk'
+import { GUEST_VERIFICATION_LEVEL } from '@homisuite/core-sdk'
 
 guest_session_is_valid(sessionId, propertyId, GUEST_VERIFICATION_LEVEL.MEDIUM)
 ```

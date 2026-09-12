@@ -55,10 +55,10 @@ export function ShellLayout() {
     }
   }, [drawerOpen])
 
-  if (runtime.status === 'loading') return <main className="runtime-state">Caricamento Hotsflow…</main>
+  if (runtime.status === 'loading') return <main className="runtime-state">Caricamento Homisuite…</main>
   if (runtime.status === 'signed-out') return <LoginScreen />
   if (runtime.status === 'no-property') return <main className="runtime-state">Nessuna struttura accessibile.</main>
-  if (runtime.status === 'error') return <main className="runtime-state"><strong>Impossibile caricare Hotsflow.</strong><button type="button" onClick={() => void runtime.refresh()}>Riprova</button></main>
+  if (runtime.status === 'error') return <main className="runtime-state"><strong>Impossibile caricare Homisuite.</strong><button type="button" onClick={() => void runtime.refresh()}>Riprova</button></main>
 
   const displayName = runtime.profile?.fullName ?? 'Staff'
 
@@ -84,7 +84,7 @@ export function ShellLayout() {
     </>
   )
 
-  const brandMark = <div className="brand"><span className="mark">H</span><span>Hotsflow</span></div>
+  const brandMark = <div className="brand"><span className="mark">H</span><span>Homisuite</span></div>
 
   const propertySwitcher = (
     <PropertySwitcher

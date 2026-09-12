@@ -45,7 +45,7 @@ export function ResetPasswordPage() {
   return (
     <main className="login-screen">
       <section className="login-card" aria-labelledby="reset-title">
-        <div className="login-brand"><span className="mark">H</span><span>Hotsflow</span></div>
+        <div className="login-brand"><span className="mark">H</span><span>Homisuite</span></div>
 
         {ready === 'checking' && (
           <div className="login-copy"><p>Verifica del link in corso…</p></div>

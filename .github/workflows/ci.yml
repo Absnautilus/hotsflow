@@ -18,7 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       # modules/housekeeping publishes a real dist/ (Vite lib build); apps/web
-      # resolves @hotsflow/housekeeping-module against that dist/, so it must
+      # resolves @homisuite/housekeeping-module against that dist/, so it must
       # exist before typecheck/test run against apps/web, not only at the end.
       - run: npm run build
       - run: npm run typecheck

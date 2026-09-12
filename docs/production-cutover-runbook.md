@@ -45,13 +45,13 @@ cutover.
 | # | Item | Type | Current status (as of this document) |
 |---|---|---|---|
 | 1 | CI verde (hotsflow-core `main`) | AUTO | Verify at cutover time — was green as of `2347f68`/`c6d6643`. |
-| 2 | Schema Hotsflow alla versione prevista | AUTO | `supabase migration list` against Hotsflow, compare to repo's migration files. |
+| 2 | Schema Homisuite alla versione prevista | AUTO | `supabase migration list` against Homisuite, compare to repo's migration files. |
 | 3 | Migration history coerente | AUTO | Same command as #2. |
 | 4 | Row count legacy aggiornati | MANUAL | Re-run §A's count query (production-data-migration-plan.md) — numbers may have moved since the rehearsal (2026-09-03). |
 | 5 | Staff roster aggiornato | MANUAL | Re-check `staff_profiles` on legacy for the real hotel — same query as the rehearsal's export 2, read-only, no re-export needed unless roster changed. |
 | 6 | Staff suspended/inactive re-verified | MANUAL | `select count(*) from staff_profiles where hotel_id = '25b00bec-...' and not active;` — was 0 at rehearsal time. |
 | 7 | Nessuna anomalia introdotta dopo la rehearsal | MANUAL | Re-run the full §2 validation query set from `production-migration-rehearsal.md` on legacy. |
-| 8 | Entitlement config (module exists) | AUTO | `select id from modules where slug = 'guest_requests';` on Hotsflow — already stable since Fase 2. |
+| 8 | Entitlement config (module exists) | AUTO | `select id from modules where slug = 'guest_requests';` on Homisuite — already stable since Fase 2. |
 | 9 | Edge Functions | AUTO+MANUAL | Deployed status checkable via API (AUTO); actual behavior needs one live call each (MANUAL) — already confirmed working in the 5-step gate, re-verify not assumed stale-safe. |
 | 10 | Realtime | AUTO | Same publication query used in the earlier infra gate — was PASS (`public.guest_requests` only). Re-run, don't assume unchanged. |
 | 11 | Database Webhook | MANUAL — **currently FAIL, real blocker** | Fix migration `20260827122700` is committed and CI-green but **not deployed to Hosted** (deliberately held per the earlier "NON toccare Vercel" instruction). Must deploy via `deploy-migrations.yml` before cutover, then re-verify with the placeholder-check query. |
@@ -60,7 +60,7 @@ cutover.
 | 14 | Secrets | MANUAL | See §9 — at least one new GitHub secret needs creating before the real run. |
 | 15 | Auth configuration (Site URL / Redirect URLs) | MANUAL — **currently PENDING, real blocker** | Production domain was never finalized in the earlier infra gate. Must be decided and configured before cutover, or guest/staff login will break post-cutover regardless of data migration success. |
 | 16 | Vercel environment attuale | MANUAL | Record current `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`/`VITE_HOTEL_ID`/`VITE_VAPID_PUBLIC_KEY` values before touching anything — this is the rollback baseline (§7.D). |
-| 17 | Backup/snapshot available | MANUAL | Confirm a recent Supabase-managed backup exists for the Hotsflow project (Studio → Database → Backups), or take a manual `pg_dump` snapshot immediately before FINAL EXPORT. Legacy itself is never written to, so it needs no separate backup for this migration. |
+| 17 | Backup/snapshot available | MANUAL | Confirm a recent Supabase-managed backup exists for the Homisuite project (Studio → Database → Backups), or take a manual `pg_dump` snapshot immediately before FINAL EXPORT. Legacy itself is never written to, so it needs no separate backup for this migration. |
 
 **Honest summary: items 11, 12, and 15 are not yet resolved** — this
 checklist surfaces them again deliberately, not to duplicate the earlier
@@ -153,7 +153,7 @@ Each step: comando/azione — sistema — expected result — PASS — STOP — 
 
 ### PRE-FLIGHT
 1. **Run pre-cutover checklist (§2) in full.**
-   System: legacy + Hotsflow + Vercel + GitHub.
+   System: legacy + Homisuite + Vercel + GitHub.
    Expected: all 17 items confirmed, including the 3 currently-open ones (§2.11/12/15) resolved.
    PASS: 17/17 green. STOP: any item red → do not proceed, resolve first.
    Reversibility: N/A (no state changed yet).
@@ -183,24 +183,24 @@ Each step: comando/azione — sistema — expected result — PASS — STOP — 
    Reversibility: fully reversible (still read-only).
 
 ### AUTH MIGRATION
-5. **Run the Auth-creation phase** (`orchestrate_rehearsal.sh`'s pattern, real hotel, real Hotsflow project) — remapping strategy, no explicit id.
-   System: Hotsflow (auth.users — a write, but additive/isolated).
+5. **Run the Auth-creation phase** (`orchestrate_rehearsal.sh`'s pattern, real hotel, real Homisuite project) — remapping strategy, no explicit id.
+   System: Homisuite (auth.users — a write, but additive/isolated).
    Expected: 3 new Auth users created, `legacy_id → new_id` mapping recorded.
    PASS: 3/3 created successfully.
    STOP: any creation fails → run the mid-Auth-failure cleanup procedure (delete whatever was created this run — plan §B.1.5), REOPEN, investigate. Do not proceed to SQL migration with a partial mapping.
    Reversibility: reversible via `admin.deleteUser()` for exactly the ids created this run — cheap, already validated in the rehearsal (item 12).
 
 ### SQL MIGRATION
-6. **Run `10_migrate_hotel.sql`** against Hotsflow, real hotel id/name/slug, the just-built `auth_remap` table.
-   System: Hotsflow (hotels, organizations, properties, legacy_property_mapping, property_modules, profiles, memberships, staff_profiles, rooms, request_categories, request_types, stays, guest_requests).
+6. **Run `10_migrate_hotel.sql`** against Homisuite, real hotel id/name/slug, the just-built `auth_remap` table.
+   System: Homisuite (hotels, organizations, properties, legacy_property_mapping, property_modules, profiles, memberships, staff_profiles, rooms, request_categories, request_types, stays, guest_requests).
    Expected: single transaction, commits or fully rolls back — no partial state possible.
    PASS: `COMMIT` returned.
    STOP: any error → transaction auto-rolls-back (Postgres guarantee, validated in rehearsal item 13); then also clean up the now-orphaned Auth users from step 5 (plan §I.3/§B.1.5), REOPEN, investigate.
    Reversibility: the SQL side is atomic (all-or-nothing); once committed, reversing means a manual down-script, not automatic — see §7.C.
 
 ### RECONCILIATION
-7. **Run `20_reconciliation.sql`** against Hotsflow for the real hotel id.
-   System: Hotsflow (read-only).
+7. **Run `20_reconciliation.sql`** against Homisuite for the real hotel id.
+   System: Homisuite (read-only).
    Expected: matches the rehearsal's pattern — 0 PK dupes, 0 FK orphans, exactly 1 hotel→property mapping, all staff chain checks true, entitlement enabled=true, active/suspended counts equal, master→organization_admin membership present.
    PASS: every check matches expected (§10 acceptance criteria).
    STOP: **any** mismatch → do NOT proceed to Application Cutover. Legacy is still production (freeze still on, but Vercel still points at legacy) — see §5 checkpoint below. Decide fix-forward vs full rollback (§7.C) before continuing.
@@ -209,16 +209,16 @@ Each step: comando/azione — sistema — expected result — PASS — STOP — 
 **>>> CHECKPOINT — see §5. Vercel has not been touched yet. <<<**
 
 ### APPLICATION CUTOVER
-8. **Change Vercel production env vars**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (or publishable key) → Hotsflow's values; `VITE_HOTEL_ID` → unchanged (same value, ID preservation confirmed by the rehearsal); `VITE_VAPID_PUBLIC_KEY` → the new rotated key if VAPID rollout is bundled into this cutover. Redeploy.
+8. **Change Vercel production env vars**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (or publishable key) → Homisuite's values; `VITE_HOTEL_ID` → unchanged (same value, ID preservation confirmed by the rehearsal); `VITE_VAPID_PUBLIC_KEY` → the new rotated key if VAPID rollout is bundled into this cutover. Redeploy.
    System: Vercel (production).
-   Expected: new deployment live, pointing at Hotsflow.
+   Expected: new deployment live, pointing at Homisuite.
    PASS: deployment succeeds, app loads.
-   STOP: deployment fails or app doesn't load at all → revert env vars to the recorded baseline (§2.16), redeploy — legacy is untouched, this is still case §7.D (no new writes exist on Hotsflow from real users yet).
-   Reversibility: fully reversible up until real user writes land on Hotsflow post-cutover (§7.D vs §7.E boundary).
+   STOP: deployment fails or app doesn't load at all → revert env vars to the recorded baseline (§2.16), redeploy — legacy is untouched, this is still case §7.D (no new writes exist on Homisuite from real users yet).
+   Reversibility: fully reversible up until real user writes land on Homisuite post-cutover (§7.D vs §7.E boundary).
 
 ### SMOKE TEST
 9. **Run the smoke test set (§6)** against production, for real.
-   System: Hotsflow + Vercel production.
+   System: Homisuite + Vercel production.
    Expected: all non-destructive checks pass; the few mutating ones (§6) create clearly-marked test data or are done last, deliberately.
    PASS: 100% of critical checks (§10).
    STOP: any critical check fails → this is now potentially case §7.D or §7.E depending on whether any real (non-test) user write has landed since step 8 — check timestamps before deciding which.
@@ -227,14 +227,14 @@ Each step: comando/azione — sistema — expected result — PASS — STOP — 
 ### GO / ROLLBACK DECISION
 10. **Explicit decision**, made by you, informed by steps 7–9's results against §10's acceptance criteria.
     System: N/A (human decision point).
-    Expected: GO (stay on Hotsflow) or ROLLBACK (per §7's matching case).
+    Expected: GO (stay on Homisuite) or ROLLBACK (per §7's matching case).
     PASS: decision made and recorded.
     STOP: N/A — this step doesn't fail, it resolves the prior STOPs.
     Reversibility: N/A.
 
 ### REOPEN
-11. **Lift the freeze** (§3's GRANT) — on whichever system is now production (legacy if rolled back, Hotsflow's write paths were never frozen since they're new).
-    System: legacy (and confirm Hotsflow's own RLS/grants are in their normal, non-frozen state — they were never touched by the freeze).
+11. **Lift the freeze** (§3's GRANT) — on whichever system is now production (legacy if rolled back, Homisuite's write paths were never frozen since they're new).
+    System: legacy (and confirm Homisuite's own RLS/grants are in their normal, non-frozen state — they were never touched by the freeze).
     Expected: normal write traffic resumes on the actual production system.
     PASS: a real write succeeds against the correct backend.
     STOP: N/A — this is the closing step.
@@ -297,8 +297,8 @@ fine" judgment call is not acceptable.
 | **A. Failure before Auth migration** (pre-flight, freeze, export, validation) | Any STOP in sequence steps 1–4 | No impact. Nothing was written anywhere. REOPEN (lift freeze if applied), fix the cause, restart from PRE-FLIGHT or the failed step. |
 | **B. Failure during Auth migration** (step 5) | Any staff Auth-creation fails | Delete every Auth user created in *this run* (tracked as it happens, per plan §B.1.5 — already validated in rehearsal item 12). REOPEN. No SQL migration was attempted. Investigate and restart from AUTH MIGRATION (or earlier, if the cause is upstream). |
 | **C. Failure in SQL migration, before Vercel cutover** (step 6 or the §5 checkpoint) | Transaction aborts, or reconciliation (step 7) fails the §5 checkpoint | SQL side: transaction auto-rolled-back if it aborted (nothing to undo); if it *committed* but reconciliation still failed some check, a manual down-script removes exactly what this run inserted (all ids are known — recorded from the run's own output). Auth side: delete the users created in step 5 for this run. REOPEN. **Legacy remains production throughout — Vercel was never touched.** |
-| **D. Failure immediately after Vercel cutover, before any new real write on Hotsflow** | Step 8 or 9 fails, and a timestamp check confirms no real (non-test) row was created on Hotsflow after the cutover moment | Yes — simply repoint Vercel's env vars back to the recorded legacy baseline (§2.16) and redeploy. Legacy's data is unchanged (frozen, then reopened once the revert is live). This is the one case where "just revert the env vars" is actually sufficient — confirmed exactly that, not assumed. |
-| **E. Failure after Hotsflow has received real writes** | A real guest/staff action landed on Hotsflow before the problem was found | **Not simply revertible — see below.** |
+| **D. Failure immediately after Vercel cutover, before any new real write on Homisuite** | Step 8 or 9 fails, and a timestamp check confirms no real (non-test) row was created on Homisuite after the cutover moment | Yes — simply repoint Vercel's env vars back to the recorded legacy baseline (§2.16) and redeploy. Legacy's data is unchanged (frozen, then reopened once the revert is live). This is the one case where "just revert the env vars" is actually sufficient — confirmed exactly that, not assumed. |
+| **E. Failure after Homisuite has received real writes** | A real guest/staff action landed on Homisuite before the problem was found | **Not simply revertible — see below.** |
 
 **Case E, in full:**
 - **Which data could only exist on the new system:** anything with
@@ -307,7 +307,7 @@ fine" judgment call is not acceptable.
   row the migration script itself didn't create.
 - **How to identify it:** `where hotel_id = '25b00bec-...' and created_at > '<cutover_timestamp>'` on each of those three tables — small and bounded, the same pattern as the main plan's §I.3.
 - **Replay/back-migration possibility:** yes, for simple cases (a new guest request can be manually re-entered into legacy by staff) — but not guaranteed lossless for anything with side effects already triggered (a push notification sent, a PMS sync already attempted) or for edits to a *migrated* row (distinguishing "a migrated row that got updated after cutover" from "genuinely new" needs the same timestamp comparison, applied more carefully).
-- **When rollback becomes riskier than forward-fix:** as soon as more than a handful of real rows exist, or any of them have been acted on by a second person (e.g., a request accepted by staff, not just created) — replaying loses the *sequence* of who-did-what, not just the data. Default posture (per the main plan §I.3, unchanged by this runbook): **forward-fix, not backward-revert**, once real writes exist — fix the problem on Hotsflow rather than manually reconstructing lost actions on legacy.
+- **When rollback becomes riskier than forward-fix:** as soon as more than a handful of real rows exist, or any of them have been acted on by a second person (e.g., a request accepted by staff, not just created) — replaying loses the *sequence* of who-did-what, not just the data. Default posture (per the main plan §I.3, unchanged by this runbook): **forward-fix, not backward-revert**, once real writes exist — fix the problem on Homisuite rather than manually reconstructing lost actions on legacy.
 - **Who/what decides:** you, explicitly, in the moment — this is deliberately not automated or pre-scripted. The runbook's job is to hand you the exact delta query and the two options, not to pick for you.
 
 ---
@@ -320,7 +320,7 @@ left in place rather than reopened) but otherwise completely untouched
 for **24–48 hours** after a successful cutover, purely as a cold,
 unmodified fallback reference — not an active system, not written to,
 not read by the application. If nothing surfaces in that window, formally
-declare Hotsflow the source of truth and decide legacy's decommission
+declare Homisuite the source of truth and decide legacy's decommission
 timeline separately (main plan §J). No dual-write, no sync mechanism, no
 new distributed system — deliberately, per instruction, since building
 one just to make a few dozen rows' migration reversible would be a much
@@ -340,11 +340,11 @@ that same treatment.
 
 | Credential | Where it's used | Who configures it |
 |---|---|---|
-| Hotsflow project's `secret`/`service_role` API key | Auth-creation phase (GoTrue admin API) for the real migration | **New** — does not currently exist as a GitHub secret in this repo (confirmed: `deploy-migrations.yml` only uses the raw DB password for SQL-level access, never the API key). Proposed name: `SUPABASE_SECRET_KEY` (repository secret, `Absnautilus/hotsflow`, Settings → Secrets and variables → Actions → New repository secret). You add it directly there, never through me — never paste the value in chat, never pass it as a `workflow_dispatch` input. |
-| Hotsflow DB connection (`SUPABASE_DB_HOST`/`_USER`/`_PASSWORD`) | SQL migration + reconciliation | Already exists (`deploy-migrations.yml` already uses these) — reuse, don't recreate. |
-| New VAPID private key | Supabase Edge Function secret on Hotsflow | You run `supabase secrets set VAPID_PRIVATE_KEY=... VAPID_PUBLIC_KEY=... VAPID_SUBJECT=...` yourself, directly against Hotsflow, using the CLI or Studio — never pasted here. |
+| Homisuite project's `secret`/`service_role` API key | Auth-creation phase (GoTrue admin API) for the real migration | **New** — does not currently exist as a GitHub secret in this repo (confirmed: `deploy-migrations.yml` only uses the raw DB password for SQL-level access, never the API key). Proposed name: `SUPABASE_SECRET_KEY` (repository secret, `Absnautilus/hotsflow`, Settings → Secrets and variables → Actions → New repository secret). You add it directly there, never through me — never paste the value in chat, never pass it as a `workflow_dispatch` input. |
+| Homisuite DB connection (`SUPABASE_DB_HOST`/`_USER`/`_PASSWORD`) | SQL migration + reconciliation | Already exists (`deploy-migrations.yml` already uses these) — reuse, don't recreate. |
+| New VAPID private key | Supabase Edge Function secret on Homisuite | You run `supabase secrets set VAPID_PRIVATE_KEY=... VAPID_PUBLIC_KEY=... VAPID_SUBJECT=...` yourself, directly against Homisuite, using the CLI or Studio — never pasted here. |
 | New VAPID public key | Vercel `VITE_VAPID_PUBLIC_KEY` | You set this directly in Vercel — it's not secret (client-exposed by design) but still a manual, direct action. |
-| Vercel's Hotsflow `VITE_SUPABASE_URL`/anon key | Application cutover (step 8) | You set these directly in Vercel. |
+| Vercel's Homisuite `VITE_SUPABASE_URL`/anon key | Application cutover (step 8) | You set these directly in Vercel. |
 
 Given a new secret is required either way, the actual production
 migration run should go through a **new, dedicated GitHub Actions
@@ -407,7 +407,7 @@ expected value.
    per instruction.
 5. **Acceptance criteria**: §10.
 6. **Secrets/config manuali necessari**: §9 — one new GitHub secret
-   required (Hotsflow's API key), plus VAPID and Vercel env changes, all
+   required (Homisuite's API key), plus VAPID and Vercel env changes, all
    manual, none through this chat.
 7. **Maintenance window estimate**: 15–20 minutes, broken down —
    freeze+export+validation (~5 min including manual review, script
@@ -418,14 +418,14 @@ expected value.
    rehearsal's raw 2.6s script time, because real network latency and
    human verification dominate at this data volume, not computation.
 8. **Differenze rispetto alla rehearsal**: real network path to the real
-   Hotsflow project (not localhost); a brand-new Auth-creation credential
+   Homisuite project (not localhost); a brand-new Auth-creation credential
    (not needed in the rehearsal's local-stack context); the freeze
    mechanism (§3) was never exercised by the rehearsal, since a synthetic
    dry-run has nothing to freeze; the Application Cutover and Smoke Test
    steps have no rehearsal equivalent at all (the rehearsal never touched
    Vercel).
 9. **Rischi residui**:
-   - **HIGH**: rollback after real writes land on Hotsflow (§7.E) is a
+   - **HIGH**: rollback after real writes land on Homisuite (§7.E) is a
      manual judgment call by design — not automatable, not resolved by
      any amount of further preparation.
    - **HIGH**: the three open pre-cutover items (§2.11/12/15) are real
@@ -435,7 +435,7 @@ expected value.
    - **RESOLVED** (was MEDIUM): the freeze mechanism (§3) has now been
      rehearsed end-to-end on the disposable stack, including a
      failure-scenario recovery test — no longer unexercised, though the
-     real Hotsflow/legacy tables will still be its first use against a
+     real Homisuite/legacy tables will still be its first use against a
      real project.
    - **RESOLVED** (was MEDIUM): department-isolation's negative case is
      covered at the SQL/pgTAP level

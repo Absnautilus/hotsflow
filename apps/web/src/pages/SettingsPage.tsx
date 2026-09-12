@@ -15,8 +15,8 @@ export function SettingsPage() {
   const runtime = useModuleRuntime()
   const housekeepingAccess = useHousekeepingAccess()
   const propertyName = runtime.property?.name ?? 'Struttura'
-  const profileName = runtime.profile?.fullName ?? 'Utente Hotsflow'
-  const [language, setLanguage] = useState(() => localStorage.getItem('hotsflow.language') === 'en' ? 'en' : 'it')
+  const profileName = runtime.profile?.fullName ?? 'Utente Homisuite'
+  const [language, setLanguage] = useState(() => localStorage.getItem('homisuite.language') === 'en' ? 'en' : 'it')
   const [propertyOpen, setPropertyOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
@@ -29,14 +29,14 @@ export function SettingsPage() {
       const next = (event as CustomEvent<string>).detail
       if (next === 'it' || next === 'en') setLanguage(next)
     }
-    window.addEventListener('hotsflow:language-change', syncLanguage)
-    return () => window.removeEventListener('hotsflow:language-change', syncLanguage)
+    window.addEventListener('homisuite:language-change', syncLanguage)
+    return () => window.removeEventListener('homisuite:language-change', syncLanguage)
   }, [])
 
   return (
     <div className="page-stack shell-page settings-page">
       <header className="page-heading">
-        <p className="eyebrow">Hotsflow</p>
+        <p className="eyebrow">Homisuite</p>
         <h1>Impostazioni</h1>
         <p>Preferenze della struttura, del tuo account e dei moduli.</p>
       </header>
@@ -147,7 +147,7 @@ function PropertyModal({ open, onClose, onSaved }: { open: boolean; onClose: () 
   }
   const checkInDefault = typeof runtime.property?.settings.checkInTime === 'string' ? runtime.property.settings.checkInTime : ''
   const checkOutDefault = typeof runtime.property?.settings.checkOutTime === 'string' ? runtime.property.settings.checkOutTime : ''
-  return <Modal open={open} title="Informazioni struttura" description="Dati condivisi da tutti i moduli Hotsflow." onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="property-form" disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
+  return <Modal open={open} title="Informazioni struttura" description="Dati condivisi da tutti i moduli Homisuite." onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="submit" form="property-form" disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
     <form className="modal-form" id="property-form" onSubmit={submit}>
       <label className="form-field"><span>Nome struttura</span><input name="name" required minLength={2} maxLength={120} defaultValue={runtime.property?.name} /></label>
       <label className="form-field" htmlFor="property-timezone"><span>Fuso orario</span><Select id="property-timezone" name="timezone" value={timezone} onChange={setTimezone}><option value="Europe/Rome">Europa — Roma</option><option value="Europe/London">Europa — Londra</option><option value="Europe/Amsterdam">Europa — Amsterdam</option><option value="America/Mexico_City">America — Città del Messico</option><option value="America/New_York">America — New York</option></Select></label>
