@@ -62,10 +62,6 @@ export function ItemsPage({ hotelId }: { hotelId: string }) {
   }
 
   async function onToggleItem(item: RequestTypeAdmin) {
-    if (item.active) {
-      const ok = await confirm({ title: t('staff.items.deactivateTitle'), description: t('staff.items.deactivateDesc', { name: item.name }), confirmLabel: t('staff.items.deactivateConfirm') })
-      if (!ok) return
-    }
     setError(null)
     const next = !item.active
     setTypes((current) => current.map((rt) => (rt.id === item.id ? { ...rt, active: next } : rt)))
