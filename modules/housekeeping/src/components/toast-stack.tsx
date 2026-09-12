@@ -1,5 +1,5 @@
 import type { Toast } from '@/hooks/use-toasts'
-import { IconCheck, IconX } from '@/components/ui/action-icons'
+import { Check, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useLocale } from '@/lib/i18n/locale-context'
 
@@ -15,7 +15,7 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
             <div className="mt-2 flex justify-end gap-2">
               <IconButton
                 tone="hintCaution"
-                icon={IconX}
+                icon={X}
                 label={t('staff.row.reject')}
                 onClick={() => {
                   toast.card?.onReject()
@@ -24,7 +24,7 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
               />
               <IconButton
                 tone="hintPositive"
-                icon={IconCheck}
+                icon={Check}
                 label={t('staff.row.claim')}
                 onClick={() => {
                   toast.card?.onAccept()
@@ -54,9 +54,9 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
             <button
               type="button"
               onClick={() => onDismiss(toast.id)}
-              className="shrink-0 cursor-pointer rounded-full p-1.5 text-muted hover:bg-surface-2 hover:text-foreground"
+              className="shrink-0 cursor-pointer rounded-lg border-0 bg-transparent p-1.5 text-muted transition-colors hover:text-accent"
             >
-              <IconX className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ),

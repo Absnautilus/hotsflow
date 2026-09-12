@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { IconLanguages, IconTrash } from '@/components/ui/action-icons'
+import { Languages, Trash2 } from 'lucide-react'
 import { FieldError, FieldGroup, Input, Label, Select, Textarea } from '@/components/ui/field'
 import { Switch, SwitchControl } from '@/components/ui/switch'
 import { AutoText } from '@/components/auto-text'
@@ -51,10 +51,12 @@ export function ItemsPage({ hotelId }: { hotelId: string }) {
       if (!ok) return
     }
     setError(null)
+    const next = !category.active
+    setCategories((current) => current.map((c) => (c.id === category.id ? { ...c, active: next } : c)))
     try {
-      await setRequestCategoryActive(category.id, !category.active)
-      await reload()
+      await setRequestCategoryActive(category.id, next)
     } catch {
+      setCategories((current) => current.map((c) => (c.id === category.id ? { ...c, active: category.active } : c)))
       setError(t('staff.items.toggleError'))
     }
   }
@@ -65,10 +67,12 @@ export function ItemsPage({ hotelId }: { hotelId: string }) {
       if (!ok) return
     }
     setError(null)
+    const next = !item.active
+    setTypes((current) => current.map((rt) => (rt.id === item.id ? { ...rt, active: next } : rt)))
     try {
-      await setRequestTypeActive(item.id, !item.active)
-      await reload()
+      await setRequestTypeActive(item.id, next)
     } catch {
+      setTypes((current) => current.map((rt) => (rt.id === item.id ? { ...rt, active: item.active } : rt)))
       setError(t('staff.items.toggleError'))
     }
   }
@@ -112,12 +116,12 @@ export function ItemsPage({ hotelId }: { hotelId: string }) {
 
 function CategoryRow({ category, onToggle, onRemove, onSaved }: { category: RequestCategoryAdmin; onToggle: () => void; onRemove: () => void; onSaved: () => Promise<void> }) {
   const { t } = useLocale(); const [open, setOpen] = useState(false)
-  return <><tr><td className="px-4 py-2 font-medium text-foreground"><AutoText text={category.name} translations={category.name_i18n} /></td><td className="px-4 py-2 text-muted">{t(`department.${category.department}`)}</td><td className="px-4 py-2"><SwitchControl checked={category.active} onCheckedChange={onToggle} aria-label={category.active ? t('staff.items.deactivate') : t('staff.items.reactivate')} /></td><td className="px-4 py-2 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><IconButton tone="neutral" icon={IconLanguages} label={t('staff.items.translations')} onClick={() => setOpen((v) => !v)} /><IconButton tone="danger" icon={IconTrash} label={t('staff.items.remove')} onClick={onRemove} /></div></td></tr>{open && <tr><td colSpan={4} className="bg-surface-2 px-4 py-3"><NameTranslationsForm baseName={category.name} initial={category.name_i18n} onSave={async (name_i18n) => { await updateRequestCategoryTranslations(category.id, name_i18n); await onSaved() }} /></td></tr>}</>
+  return <><tr><td className="px-4 py-2 font-medium text-foreground"><AutoText text={category.name} translations={category.name_i18n} /></td><td className="px-4 py-2 text-muted">{t(`department.${category.department}`)}</td><td className="px-4 py-2"><SwitchControl checked={category.active} onCheckedChange={onToggle} aria-label={category.active ? t('staff.items.deactivate') : t('staff.items.reactivate')} /></td><td className="px-4 py-2 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><IconButton tone="neutral" icon={Languages} label={t('staff.items.translations')} onClick={() => setOpen((v) => !v)} /><IconButton tone="danger" icon={Trash2} label={t('staff.items.remove')} onClick={onRemove} /></div></td></tr>{open && <tr><td colSpan={4} className="bg-surface-2 px-4 py-3"><NameTranslationsForm baseName={category.name} initial={category.name_i18n} onSave={async (name_i18n) => { await updateRequestCategoryTranslations(category.id, name_i18n); await onSaved() }} /></td></tr>}</>
 }
 
 function ItemRow({ item, onToggle, onRemove, onSaved }: { item: RequestTypeAdmin; onToggle: () => void; onRemove: () => void; onSaved: () => Promise<void> }) {
   const { t } = useLocale(); const [open, setOpen] = useState(false)
-  return <><tr><td className="px-4 py-2 font-medium text-foreground"><AutoText text={item.name} translations={item.name_i18n} /></td><td className="px-4 py-2 text-muted">{item.description ? <AutoText text={item.description} translations={item.description_i18n} /> : '—'}</td><td className="px-4 py-2 tabular-nums text-muted">{item.available_quantity ?? '—'}</td><td className="px-4 py-2"><SwitchControl checked={item.active} onCheckedChange={onToggle} aria-label={item.active ? t('staff.items.deactivate') : t('staff.items.reactivate')} /></td><td className="px-4 py-2 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><IconButton tone="neutral" icon={IconLanguages} label={t('staff.items.translations')} onClick={() => setOpen((v) => !v)} /><IconButton tone="danger" icon={IconTrash} label={t('staff.items.remove')} onClick={onRemove} /></div></td></tr>{open && <tr><td colSpan={5} className="bg-surface-2 px-4 py-3"><div className="space-y-4"><NameTranslationsForm label={t('staff.items.name')} baseName={item.name} initial={item.name_i18n} onSave={async (name_i18n) => { await updateRequestTypeTranslations(item.id, { name_i18n, description_i18n: item.description_i18n }); await onSaved() }} />{item.description && <NameTranslationsForm label={t('staff.items.description')} baseName={item.description} initial={item.description_i18n} onSave={async (description_i18n) => { await updateRequestTypeTranslations(item.id, { name_i18n: item.name_i18n, description_i18n }); await onSaved() }} />}</div></td></tr>}</>
+  return <><tr><td className="px-4 py-2 font-medium text-foreground"><AutoText text={item.name} translations={item.name_i18n} /></td><td className="px-4 py-2 text-muted">{item.description ? <AutoText text={item.description} translations={item.description_i18n} /> : '—'}</td><td className="px-4 py-2 tabular-nums text-muted">{item.available_quantity ?? '—'}</td><td className="px-4 py-2"><SwitchControl checked={item.active} onCheckedChange={onToggle} aria-label={item.active ? t('staff.items.deactivate') : t('staff.items.reactivate')} /></td><td className="px-4 py-2 text-right whitespace-nowrap"><div className="flex justify-end gap-2"><IconButton tone="neutral" icon={Languages} label={t('staff.items.translations')} onClick={() => setOpen((v) => !v)} /><IconButton tone="danger" icon={Trash2} label={t('staff.items.remove')} onClick={onRemove} /></div></td></tr>{open && <tr><td colSpan={5} className="bg-surface-2 px-4 py-3"><div className="space-y-4"><NameTranslationsForm label={t('staff.items.name')} baseName={item.name} initial={item.name_i18n} onSave={async (name_i18n) => { await updateRequestTypeTranslations(item.id, { name_i18n, description_i18n: item.description_i18n }); await onSaved() }} />{item.description && <NameTranslationsForm label={t('staff.items.description')} baseName={item.description} initial={item.description_i18n} onSave={async (description_i18n) => { await updateRequestTypeTranslations(item.id, { name_i18n: item.name_i18n, description_i18n }); await onSaved() }} />}</div></td></tr>}</>
 }
 
 function NameTranslationsForm({ label, baseName, initial, onSave }: { label?: string; baseName: string; initial: Record<string, string>; onSave: (values: Record<string, string>) => Promise<void> }) {

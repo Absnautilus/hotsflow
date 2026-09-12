@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { IconTrash } from '@/components/ui/action-icons'
+import { Trash2 } from 'lucide-react'
 import { FieldError, FieldGroup, Input, Label } from '@/components/ui/field'
 import { SwitchControl } from '@/components/ui/switch'
 import {
@@ -47,10 +47,12 @@ export function RoomsPage({ hotelId }: { hotelId: string }) {
       if (!ok) return
     }
     setError(null)
+    const next = !room.active
+    setRooms((current) => current?.map((r) => (r.id === room.id ? { ...r, active: next } : r)) ?? current)
     try {
-      await setRoomActive(room.id, !room.active)
-      await reload()
+      await setRoomActive(room.id, next)
     } catch {
+      setRooms((current) => current?.map((r) => (r.id === room.id ? { ...r, active: room.active } : r)) ?? current)
       setError(t('staff.rooms.toggleError'))
     }
   }
@@ -148,7 +150,7 @@ export function RoomsPage({ hotelId }: { hotelId: string }) {
                   <div className="flex justify-end gap-2">
                     <IconButton
                       tone="danger"
-                      icon={IconTrash}
+                      icon={Trash2}
                       label={t('staff.rooms.delete')}
                       onClick={() => onDelete(room)}
                     />

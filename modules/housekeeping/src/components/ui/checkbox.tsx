@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
-import { IconCheck } from '@/components/ui/action-icons'
+import { Check } from 'lucide-react'
 
 interface CheckboxProps {
   checked: boolean
@@ -36,7 +36,7 @@ export function Checkbox({ checked, onCheckedChange, label, disabled = false, id
       )}
       {...aria}
     >
-      {checked && <IconCheck className="h-3.5 w-3.5" />}
+      {checked && <Check className="h-3.5 w-3.5" />}
     </button>
   )
 
