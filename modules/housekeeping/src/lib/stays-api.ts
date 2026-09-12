@@ -67,6 +67,26 @@ export async function updateStay(
   if (!data) throw new Error('stay_update_not_applied')
 }
 
+// Distinct from updateCheckout (used by "Estendi", which only ever pushes
+// check_out_at later and must never touch status): a guest checking out
+// early has genuinely finished their stay, so this also closes it --
+// status: 'closed', not 'cancelled' (cancelStay's own meaning, reserved for
+// an administrative cancellation, e.g. a booking mistake). Closing is what
+// makes listStays() (status = 'active') drop the row, and what makes
+// sync_guest_sessions_on_stay_change revoke every one of the guest's
+// sessions unconditionally rather than only those expiring after the new
+// checkout time.
+export async function checkOutStayNow(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('stays')
+    .update({ check_out_at: new Date().toISOString(), status: 'closed' })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('stay_checkout_now_not_applied')
+}
+
 export async function cancelStay(id: string): Promise<void> {
   const { data, error } = await supabase.from('stays').update({ status: 'cancelled' }).eq('id', id).select('id').maybeSingle()
   if (error) throw error
