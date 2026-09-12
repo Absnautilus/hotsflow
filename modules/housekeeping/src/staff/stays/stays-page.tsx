@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { FieldError, FieldGroup, Input, Label, Select } from '@/components/ui/field'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { listRooms, type Room } from '@/lib/admin-api'
-import { cancelStay, createStay, fetchRequestsForStay, listStays, updateCheckout, updateStay, type Stay, type StayRequest } from '@/lib/stays-api'
+import { cancelStay, checkOutStayNow, createStay, fetchRequestsForStay, listStays, updateCheckout, updateStay, type Stay, type StayRequest } from '@/lib/stays-api'
 import { OperaImportPanel } from '@/staff/stays/opera-import-panel'
 import { AutoText } from '@/components/auto-text'
 import { formatElapsed, formatTime } from '@/lib/format'
@@ -185,7 +185,6 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
   const [detailsCheckOut, setDetailsCheckOut] = useState(toLocalInputValue(stay.check_out_at))
   const [pending, setPending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [actionNotice, setActionNotice] = useState<string | null>(null)
   const [confirmDialog, confirm] = useConfirm()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [history, setHistory] = useState<StayRequest[] | null>(null)
@@ -216,7 +215,6 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
   async function run(action: () => Promise<void>): Promise<boolean> {
     setPending(true)
     setActionError(null)
-    setActionNotice(null)
     try {
       await action()
       await onChanged()
@@ -229,14 +227,13 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
     }
   }
 
-  // updateCheckout's only effect on this screen is a small timestamp label
-  // update -- its real effect (cutting the guest's PIN session at the new,
-  // earlier checkout time, via stays_sync_guest_sessions) is invisible here
-  // by design. A single unconfirmed click with no feedback at all read as
-  // "non succede nulla", so this adds an explicit, if brief, confirmation.
   async function onCheckoutNow() {
-    const ok = await run(() => updateCheckout(stay.id, new Date().toISOString()))
-    if (ok) setActionNotice(t('staff.stays.checkoutNowSuccess'))
+    const ok = await confirm({
+      title: t('staff.stays.checkoutNowTitle'),
+      description: t('staff.stays.checkoutNowDesc', { room: stay.rooms?.room_number ?? '', name: stay.guest_last_name, pin: stay.guest_pin }),
+      confirmLabel: t('staff.stays.checkoutNowConfirm'),
+    })
+    if (ok) await run(() => checkOutStayNow(stay.id))
   }
 
   async function onDeactivate() {
@@ -353,7 +350,6 @@ function StayRow({ hotelId, stay, rooms, onChanged }: { hotelId: string; stay: S
           )}
         </div>
         {actionError && <p className="mt-2 text-xs font-semibold text-bad-ink" role="alert">{actionError}</p>}
-        {actionNotice && <p className="mt-2 text-xs font-semibold text-ok-ink" role="status">{actionNotice}</p>}
 
         {historyOpen && (
           <div className="mt-3 border-t border-line pt-3">
