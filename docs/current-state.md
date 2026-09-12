@@ -1,4 +1,4 @@
-# Hotsflow — current state
+# Homisuite — current state
 
 Last updated: 2026-09-05.
 
@@ -6,7 +6,7 @@ This file is the short authoritative snapshot of the platform after the first pr
 
 ## Production
 
-Housekeeping / `guest_requests` for Palazzo Veneziano is running against the shared Hotsflow Supabase backend. The Vercel production deployment was repointed from the legacy Supabase project to the shared project and validated after cutover. The legacy backend is frozen and retained only as a safety net.
+Housekeeping / `guest_requests` for Palazzo Veneziano is running against the shared Homisuite Supabase backend. The Vercel production deployment was repointed from the legacy Supabase project to the shared project and validated after cutover. The legacy backend is frozen and retained only as a safety net.
 
 The production migration moved the real hotel dataset and staff identities into the shared platform. Reconciliation completed without PK/FK anomalies; the migrated staff have Core profiles/memberships and the property has the module entitlement enabled.
 
@@ -40,7 +40,7 @@ A key integration blocker is the current build-time `VITE_HOTEL_ID` assumption. 
 
 ## App Shell direction
 
-The next product phase is a unified Hotsflow App Shell. The current preferred topology is a separate shell frontend rather than turning the Core SDK/database repository into a large monorepo. Existing modules remain independently owned while consuming shared identity, tenant, entitlement and authorization context.
+The next product phase is a unified Homisuite App Shell. The current preferred topology is a separate shell frontend rather than turning the Core SDK/database repository into a large monorepo. Existing modules remain independently owned while consuming shared identity, tenant, entitlement and authorization context.
 
 Initial shell responsibilities:
 

@@ -71,7 +71,7 @@ core table a module writes its own business data into.
 ## Using the Core SDK
 
 ```ts
-import { createCoreClient } from '@hotsflow/core-sdk'
+import { createCoreClient } from '@homisuite/core-sdk'
 
 const core = createCoreClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -96,7 +96,7 @@ calls return — never the raw database row shapes from
 uses to describe itself:
 
 ```ts
-import type { ModuleDescriptor } from '@hotsflow/core-sdk'
+import type { ModuleDescriptor } from '@homisuite/core-sdk'
 
 const descriptor: ModuleDescriptor = {
   slug: 'guest_requests',

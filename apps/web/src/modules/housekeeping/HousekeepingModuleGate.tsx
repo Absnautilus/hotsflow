@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { HousekeepingModule } from '@hotsflow/housekeeping-module'
-import '@hotsflow/housekeeping-module/style.css'
+import { HousekeepingModule } from '@homisuite/housekeeping-module'
+import '@homisuite/housekeeping-module/style.css'
 import { supabase } from '../../core/client'
 import { useModuleRuntime } from '../../core/ModuleRuntimeContext'
 import { useHousekeepingAccess } from './useHousekeepingAccess'
@@ -17,7 +17,7 @@ export function HousekeepingModuleGate() {
 
   // Housekeeping's own staff_profiles.role is no longer meaningful for
   // authorization (every Team member bridged in via grant-housekeeping-access
-  // gets role: 'admin' regardless of their real Hotsflow role -- see that
+  // gets role: 'admin' regardless of their real Homisuite role -- see that
   // function's own comment) and the module's legacy fallback for its
   // "Gestione" tab (staff_profiles.role again) inherits the same problem
   // whenever no capabilities prop is supplied. Resolving the real permission
@@ -78,7 +78,7 @@ export function HousekeepingModuleGate() {
       platformStaffManagement={{
         href: '/team',
         label: 'Apri Team',
-        description: 'Gli account e gli accessi si gestiscono una sola volta in Hotsflow Team. Qui trovi il roster operativo di Housekeeping.',
+        description: 'Gli account e gli accessi si gestiscono una sola volta in Homisuite Team. Qui trovi il roster operativo di Housekeeping.',
       }}
       hotelSettings={{
         checkInTime: typeof settings.checkInTime === 'string' ? settings.checkInTime : null,

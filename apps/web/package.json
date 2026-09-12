@@ -1,5 +1,5 @@
 {
-  "name": "@hotsflow/web",
+  "name": "@homisuite/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,8 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@hotsflow/core-sdk": "*",
-    "@hotsflow/housekeeping-module": "*",
+    "@homisuite/core-sdk": "*",
+    "@homisuite/housekeeping-module": "*",
     "@supabase/supabase-js": "^2.112.3",
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",

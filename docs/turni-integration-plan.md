@@ -1,4 +1,4 @@
-# Turni → Hotsflow integration plan
+# Turni → Homisuite integration plan
 
 Status: implementation plan only. No production database changes are made by this document.
 
@@ -17,11 +17,11 @@ The standalone Planner Turni application already persists operational data in it
 - `notifiche_lette`
 - `push_subscriptions`
 
-The shared Hotsflow production project does not currently contain these Turni-owned tables. It does contain the Core tenant/identity model (`organizations`, `properties`, `profiles`, `memberships`, roles/permissions, module entitlements) and the Housekeeping module tables.
+The shared Homisuite production project does not currently contain these Turni-owned tables. It does contain the Core tenant/identity model (`organizations`, `properties`, `profiles`, `memberships`, roles/permissions, module entitlements) and the Housekeeping module tables.
 
-The Planner frontend currently queries its tables without a tenant key. This is safe only while the module is effectively single-property. It cannot be mounted against the shared Hotsflow database as-is.
+The Planner frontend currently queries its tables without a tenant key. This is safe only while the module is effectively single-property. It cannot be mounted against the shared Homisuite database as-is.
 
-A technical module boundary now exists in the Planner repository: Hotsflow can inject its already-authenticated Supabase client and the embedded build can omit duplicate Planner chrome. That boundary must remain disconnected from Hotsflow production until the data and RLS work below is complete.
+A technical module boundary now exists in the Planner repository: Homisuite can inject its already-authenticated Supabase client and the embedded build can omit duplicate Planner chrome. That boundary must remain disconnected from Homisuite production until the data and RLS work below is complete.
 
 ## Target contract
 
@@ -107,15 +107,15 @@ Every policy also checks module entitlement for the selected property.
 
 ## Identity migration
 
-Planner Auth UUIDs cannot be copied blindly into Hotsflow because they belong to a different Supabase Auth project.
+Planner Auth UUIDs cannot be copied blindly into Homisuite because they belong to a different Supabase Auth project.
 
 For each legacy Planner employee:
 
-1. resolve the person to an existing Hotsflow Auth/Core profile where possible;
-2. create or reconcile the Hotsflow identity only through the migration identity workflow;
+1. resolve the person to an existing Homisuite Auth/Core profile where possible;
+2. create or reconcile the Homisuite identity only through the migration identity workflow;
 3. ensure an active membership exists for the target property;
-4. create the `shift_staff_profiles` row using the Hotsflow Core `profile_id`;
-5. record an explicit old-Planner-profile-id → new-Hotsflow-profile-id mapping for migration/reconciliation;
+4. create the `shift_staff_profiles` row using the Homisuite Core `profile_id`;
+5. record an explicit old-Planner-profile-id → new-Homisuite-profile-id mapping for migration/reconciliation;
 6. remap all foreign keys in shifts and request tables through that mapping.
 
 Never use names as the final identity key. Email may be used as a controlled reconciliation signal, but migration output must resolve to UUID mappings and report ambiguities instead of guessing.
@@ -126,7 +126,7 @@ The current production Planner database has 11 employee rows and 1,357 shift row
 
 Migration order:
 
-1. identify the target Hotsflow property (currently the Palazzo Veneziano operational dataset unless explicitly changed);
+1. identify the target Homisuite property (currently the Palazzo Veneziano operational dataset unless explicitly changed);
 2. reconcile all legacy employee identities;
 3. insert `shift_staff_profiles`;
 4. copy historical shifts using the identity map and target `property_id`;
@@ -137,7 +137,7 @@ Migration order:
 Minimum reconciliation gates:
 
 - legacy employee count = mapped + explicitly excluded count
-- all migrated staff rows reference an accessible Hotsflow profile/membership
+- all migrated staff rows reference an accessible Homisuite profile/membership
 - legacy shift count = migrated shift count unless exclusions are explicitly documented
 - zero shifts referencing an unmapped employee
 - zero rows with null/foreign `property_id`
@@ -147,7 +147,7 @@ Minimum reconciliation gates:
 
 The first embedded implementation should remain deliberately thin:
 
-1. Hotsflow shell supplies the shared Supabase client and active `propertyId`.
+1. Homisuite shell supplies the shared Supabase client and active `propertyId`.
 2. Turni module receives both values from its module gate.
 3. All module queries include/derive the selected property scope.
 4. Module-local login, logout and account chrome remain available only in standalone mode.
@@ -169,7 +169,7 @@ Completed in Planner Turni: injectable Supabase client, embeddable entry point, 
 
 ### T1 — additive shared schema
 
-Add Turni-owned property-scoped tables, permissions and RLS to the Hotsflow repository, with pgTAP regression tests. No legacy data is modified.
+Add Turni-owned property-scoped tables, permissions and RLS to the Homisuite repository, with pgTAP regression tests. No legacy data is modified.
 
 ### T2 — migration tooling and rehearsal
 
@@ -185,7 +185,7 @@ Pin the reviewed Turni module in `hotsflow-app`, add a `/turni/*` gate using act
 
 ### T5 — authorization/UI cleanup
 
-Replace remaining legacy admin booleans and standalone-only account logic with Core capabilities, then converge visual primitives with the Hotsflow design system without rewriting the scheduling domain logic.
+Replace remaining legacy admin booleans and standalone-only account logic with Core capabilities, then converge visual primitives with the Homisuite design system without rewriting the scheduling domain logic.
 
 ## Non-goals for the first migration
 
