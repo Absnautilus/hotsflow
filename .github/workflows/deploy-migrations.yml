@@ -96,7 +96,7 @@ jobs:
               echo "$local_val"
             fi
           done | sort)
-          expected=$(printf '%s\n' 20260912100000)
+          expected=$(printf '%s\n' 20260912110000)
           echo "Pending (local-only) migrations:"
           echo "$pending"
           if [ "$pending" != "$expected" ]; then
