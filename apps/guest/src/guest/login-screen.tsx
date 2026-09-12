@@ -7,10 +7,11 @@ import { FieldError, FieldGroup, Input, Label } from '@/components/ui/field'
 import { guestLogin } from '@/lib/guest-api'
 import { useLocale } from '@/lib/i18n/locale-context'
 
-// apps/guest is its own deployment now (one per hotel), separate from the
-// staff shell (apps/web) -- there's no local /staff route to link to
-// anymore. Optional: set VITE_STAFF_APP_URL to the shell's real URL to show
-// the prompt; omit it to hide the prompt entirely rather than link nowhere.
+// apps/guest is its own deployment now, one shared domain for every hotel,
+// separate from the staff shell (apps/web) -- there's no local /staff route
+// to link to anymore. Optional: set VITE_STAFF_APP_URL to the shell's real
+// URL to show the prompt; omit it to hide the prompt entirely rather than
+// link nowhere.
 const STAFF_APP_URL = import.meta.env.VITE_STAFF_APP_URL as string | undefined
 
 export function LoginScreen({ onSuccess }: { onSuccess: (token: string) => void }) {

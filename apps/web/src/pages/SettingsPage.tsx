@@ -3,6 +3,7 @@ import { Bell, Building2, ChevronRight, Globe2, LockKeyhole, Puzzle, UserRound }
 import { Link } from 'react-router-dom'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { Modal } from '../components/Modal'
+import { GuestLinkRow } from '../components/GuestLinkRow'
 import { NotificationsToggle } from '../components/NotificationsToggle'
 import { PasswordField } from '../components/PasswordField'
 import { Select } from '../components/Select'
@@ -45,6 +46,7 @@ export function SettingsPage() {
         <div className="settings-list shell-card">
           <SettingRow title="Informazioni struttura" detail={`${propertyName} · ${runtime.property?.timezone ?? 'Fuso orario non impostato'}`} onClick={canManageProperty ? () => setPropertyOpen(true) : undefined} status={canManageProperty ? undefined : 'Permesso richiesto'} />
           <SettingRow title="Preferenze operative" detail="Fuso orario, formati e impostazioni comuni" status="Non ancora disponibile" muted />
+          {canManageProperty && <GuestLinkRow />}
         </div>
       </section>
 
