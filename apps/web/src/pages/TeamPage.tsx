@@ -355,7 +355,7 @@ function ModulesModal({ member, onClose }: { member: TeamMember | null; onClose:
     }
   }
 
-  return <Modal open={Boolean(member)} title="Moduli" description={member ? `Moduli a cui ${member.profile.fullName} ha accesso.` : undefined} onClose={onClose} footer={<button className="btn btn-primary" type="button" onClick={onClose}>Chiudi</button>}>
+  return <Modal open={Boolean(member)} title="Moduli" description={member ? `Moduli a cui ${member.profile.fullName} ha accesso.` : undefined} onClose={onClose} footer={<><button className="btn btn-secondary" type="button" onClick={onClose}>Annulla</button><button className="btn btn-primary" type="button" onClick={onClose} disabled={saving}>{saving ? 'Salvataggio…' : 'Salva'}</button></>}>
     {loading ? <p className="muted">Caricamento…</p> : (
       <div className="module-access-row">
         <span>Housekeeping</span>
