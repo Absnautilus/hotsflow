@@ -89,6 +89,7 @@ button.job-role-chip:hover { border-color: var(--accent); }
 .settings-row strong { font-size: 12.5px; }
 .settings-row small { color: var(--muted); font-size: 11px; }
 .settings-row-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-2); color: var(--accent); }
+.settings-row-control-inline { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 
 .shell-alert { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
 .shell-alert.error { border-color: rgba(178,58,58,.22); color: var(--red-ink); background: var(--red-bg); }

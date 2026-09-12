@@ -3,6 +3,7 @@ import { Bell, Building2, ChevronRight, Globe2, LockKeyhole, Puzzle, UserRound }
 import { Link } from 'react-router-dom'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { Modal } from '../components/Modal'
+import { NotificationsToggle } from '../components/NotificationsToggle'
 import { PasswordField } from '../components/PasswordField'
 import { Select } from '../components/Select'
 import { core, supabase } from '../core/client'
@@ -55,7 +56,10 @@ export function SettingsPage() {
             <span className="settings-row-main"><span className="settings-row-icon"><Globe2 size={17} /></span><span><strong>Lingua</strong><small>{language === 'en' ? 'English' : 'Italiano'}</small></span></span>
             <LanguageToggle />
           </div>
-          <SettingRow icon={<Bell size={17} />} title="Notifiche" detail="Preferenze globali" status="Non ancora disponibile" muted />
+          <div className="settings-row settings-row-control">
+            <span className="settings-row-main"><span className="settings-row-icon"><Bell size={17} /></span><span><strong>Notifiche</strong><small>Preferenze globali</small></span></span>
+            <NotificationsToggle />
+          </div>
           <SettingRow icon={<LockKeyhole size={17} />} title="Sicurezza" detail="Cambia la password del tuo account" onClick={() => setSecurityOpen(true)} />
         </div>
       </section>

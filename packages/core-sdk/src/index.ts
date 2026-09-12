@@ -28,4 +28,6 @@ export type {
 export { GUEST_VERIFICATION_LEVEL } from './guestSession'
 export type { GuestVerificationLevel } from './guestSession'
 
+export type { DevicePushSubscriptionKeys } from './devicePush'
+
 export type { Database, Json } from './types/database'
